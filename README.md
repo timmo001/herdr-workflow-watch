@@ -2,8 +2,8 @@
 
 GitHub workflow failure indicators for Herdr workspaces.
 
-Watches the current branch of every open GitHub-backed workspace. `CI !2` means
-two workflow runs need attention; `CI ?` means GitHub or repository state could
+Watches the current branch of every open GitHub-backed workspace. `CI: !2` means
+two workflow runs need attention; `CI: ?` means GitHub or repository state could
 not be read. Healthy workspaces have no indicator by default; enable `showSuccess`
 to display `CI: ✓` when CI has passed. Ineligible workspaces have no indicator.
 
@@ -34,7 +34,7 @@ Add the token to your existing Space rows and bind the picker in Herdr's config:
 [ui.sidebar.spaces]
 rows = [
   ["state_icon", "workspace"],
-  ["branch", "git_status", { token = "$timmo_workflow_watch", fg = "#f38ba8", dim = false, rules = [{ equals = "CI ?", fg = "#f9e2af" }, { equals = "CI: ✓", fg = "#a6e3a1" }] }],
+  ["branch", "git_status", { token = "$timmo_workflow_watch", fg = "#f38ba8", dim = false, rules = [{ equals = "CI: ?", fg = "#f9e2af" }, { equals = "CI: ✓", fg = "#a6e3a1" }] }],
 ]
 
 [[keys.command]]
@@ -81,6 +81,11 @@ Create `config.json` in the directory printed by `herdr plugin config-dir`:
   "timeoutSeconds": 30,
   "concurrency": 3,
   "showSuccess": true,
+  "indicatorTemplates": {
+    "failure": "CI: !{count}",
+    "unavailable": "CI: ?",
+    "success": "CI: ✓"
+  },
   "launchers": [
     {
       "id": "custom-opencode",
@@ -102,6 +107,26 @@ Create `config.json` in the directory printed by `herdr plugin config-dir`:
 `showSuccess` defaults to `false`. Set it to `true` to show `CI: ✓` when at least
 one run succeeds and all runs have completed with success, neutral or skipped
 conclusions. Pending, cancelled and empty run lists do not show a checkmark.
+
+`indicatorTemplates` controls each indicator's full text, including icons,
+spacing and punctuation. Omitted entries use the defaults shown above. Templates
+must be non-empty; every `{count}` in `failure` is replaced with the number of
+runs needing attention. `unavailable` and `success` are literal text.
+
+For compact icons, use:
+
+```json
+{
+  "indicatorTemplates": {
+    "failure": "⚡!{count}",
+    "unavailable": "⚡?",
+    "success": "⚡✓"
+  }
+}
+```
+
+Update the sidebar colour rules' `equals` values to match your templates, such
+as `"⚡?"` and `"⚡✓"`. The success template still requires `showSuccess: true`.
 
 Omit `launchers` to use the built-in choices: OpenCode, Pi, Cursor Agent, Claude
 Code, Codex, GitHub Copilot, OMP, Devin, Droid, Kimi, Kilo, Hermes, Qoder CLI,

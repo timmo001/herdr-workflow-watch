@@ -160,11 +160,14 @@ export const watch = Effect.gen(function* () {
         yield* herdr.metadata(
           item.id,
           error
-            ? "CI ?"
+            ? config.indicatorTemplates.unavailable
             : failures.length
-              ? `CI !${failures.length}`
+              ? config.indicatorTemplates.failure.replaceAll(
+                  "{count}",
+                  String(failures.length),
+                )
               : success
-                ? "CI: ✓"
+                ? config.indicatorTemplates.success
                 : null,
         );
         return {

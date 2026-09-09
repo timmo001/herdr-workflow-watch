@@ -76,6 +76,13 @@ const Settings = Schema.Struct({
     Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 })),
   ),
   showSuccess: Schema.optionalKey(Schema.Boolean),
+  indicatorTemplates: Schema.optionalKey(
+    Schema.Struct({
+      failure: Schema.optionalKey(Text),
+      unavailable: Schema.optionalKey(Text),
+      success: Schema.optionalKey(Text),
+    }),
+  ),
   launchers: Schema.optionalKey(Schema.Array(Launcher)),
 });
 
@@ -97,6 +104,11 @@ export class RuntimeConfig extends Context.Service<
     readonly timeoutMs: number;
     readonly concurrency: number;
     readonly showSuccess: boolean;
+    readonly indicatorTemplates: {
+      readonly failure: string;
+      readonly unavailable: string;
+      readonly success: string;
+    };
     readonly launchers: ReadonlyArray<typeof Launcher.Type>;
   }
 >()("herdr-workflow-watch/Config") {
@@ -137,6 +149,11 @@ export class RuntimeConfig extends Context.Service<
         timeoutMs: (settings.timeoutSeconds ?? 30) * 1000,
         concurrency: settings.concurrency ?? 3,
         showSuccess: settings.showSuccess ?? false,
+        indicatorTemplates: {
+          failure: settings.indicatorTemplates?.failure ?? "CI: !{count}",
+          unavailable: settings.indicatorTemplates?.unavailable ?? "CI: ?",
+          success: settings.indicatorTemplates?.success ?? "CI: ✓",
+        },
         launchers,
       });
     }).pipe(
