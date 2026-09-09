@@ -1,0 +1,43 @@
+id = "timmo.workflow-watch"
+name = "Workflow Watch"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "GitHub workflow failures for each workspace"
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["mise", "exec", "--", "bun", "install", "--frozen-lockfile"]
+
+[[build]]
+command = ["mise", "run", "build"]
+
+[[startup]]
+command = ["mise", "exec", "--", "bun", "dist/index.js", "start"]
+
+[[events]]
+on = "workspace.created"
+command = ["mise", "exec", "--", "bun", "dist/index.js", "start"]
+
+[[events]]
+on = "worktree.opened"
+command = ["mise", "exec", "--", "bun", "dist/index.js", "start"]
+
+[[actions]]
+id = "start"
+title = "Start workflow watcher"
+contexts = ["global", "workspace"]
+command = ["mise", "exec", "--", "bun", "dist/index.js", "start"]
+
+[[actions]]
+id = "open"
+title = "Open workflow failures"
+contexts = ["workspace", "pane"]
+command = ["mise", "exec", "--", "bun", "dist/index.js", "open"]
+
+[[panes]]
+id = "picker"
+title = "Workflow failures"
+placement = "popup"
+width = "80%"
+height = 18
+command = ["mise", "--quiet", "exec", "--", "bun", "dist/index.js", "picker"]
