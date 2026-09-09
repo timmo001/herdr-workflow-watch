@@ -1,0 +1,33 @@
+min_version = "2025.1.0"
+
+[tools]
+node = "26.8.1"
+bun = "1.4.2"
+
+[tasks.install]
+description = "Install dependencies"
+run = "bun install"
+
+[tasks.lint]
+description = "Lint source with the shared Oxlint rules"
+run = "bun run lint"
+
+[tasks.typecheck]
+description = "Type-check source"
+run = "bun run typecheck"
+
+[tasks.format]
+description = "Format source and configuration"
+run = "bun run format"
+
+[tasks."format:check"]
+description = "Check formatting without writing"
+run = "bun run format:check"
+
+[tasks.check]
+description = "Lint, type-check and verify formatting"
+depends = ["lint", "typecheck", "format:check"]
+
+[tasks.build]
+description = "Build the Bun module into dist"
+run = "bun run build"

@@ -1,0 +1,33 @@
+{
+  "name": "herdr-workflow-watch",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub workflow failure indicators for Herdr workspaces",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "scripts": {
+    "build": "bun build src/index.ts --target=bun --outdir dist",
+    "lint": "oxlint .",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "effect-tsgo patch"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-rc.112",
+    "effect": "4.0.0-rc.112"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.43.0",
+    "@oxlint/plugins": "1.81.0",
+    "@timmo001/oxlint-rules": "0.3.0",
+    "@types/bun": "1.3.14",
+    "oxlint": "1.81.0",
+    "prettier": "3.9.5",
+    "typescript": "7.0.2"
+  },
+  "trustedDependencies": [
+    "@effect/tsgo"
+  ]
+}

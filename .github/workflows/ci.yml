@@ -1,0 +1,39 @@
+---
+name: CI
+
+on:
+  pull_request: {}
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up mise
+        uses: jdx/mise-action@5ac50f778e26fac95da98d50503682459e86d566
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check
+        run: mise run check
+
+      - name: Build
+        run: mise run build
+
+      - name: Check CLI help
+        run: bun dist/index.js --help
