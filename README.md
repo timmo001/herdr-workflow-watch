@@ -58,10 +58,11 @@ Open `timmo.workflow-watch.open` to pick a failure and then:
 - **Paste draft into original agent:** inserts the failure at the cursor without
   clearing existing input or submitting it. Available only while that same agent
   is ready, with no approval or question prompt.
-- **New agent in this checkout:** creates a pane in the originating workspace and
-  submits an investigation/fix prompt.
-- **New agent in a new worktree:** creates a unique fix branch from the selected
-  pushed commit, opens its Herdr worktree and submits the prompt there.
+- **New agent in this checkout:** asks which agent to launch, creates a pane in
+  the originating workspace and submits an investigation/fix prompt.
+- **New agent in a new worktree:** asks which agent to launch, creates a unique
+  fix branch from the selected pushed commit, opens its Herdr worktree and
+  submits the prompt there.
 
 Prompts include repository, branch, SHA, run and job IDs, attempt, URL and failed
 steps. Large logs are saved to a local file referenced by the prompt. Terminal
@@ -78,19 +79,45 @@ Create `config.json` in the directory printed by `herdr plugin config-dir`:
   "retrySeconds": 120,
   "timeoutSeconds": 30,
   "concurrency": 3,
-  "launcher": {
-    "argv": ["/path/to/agent-launcher"],
-    "agent": "opencode",
-    "verifyCommand": ["/path/to/resolve-agent-executable"]
-  }
+  "launchers": [
+    {
+      "id": "custom-opencode",
+      "label": "Custom OpenCode",
+      "argv": ["/path/to/agent-launcher"],
+      "agent": "opencode",
+      "verifyCommand": ["/path/to/resolve-agent-executable"]
+    },
+    {
+      "id": "pi",
+      "label": "Pi",
+      "argv": ["pi"],
+      "agent": "pi"
+    }
+  ]
 }
 ```
 
-The launcher is optional. Without it, the two new-agent choices are disabled.
-`argv[0]` must be an executable path. `agent` is Herdr's detected agent name.
-`verifyCommand` must print the single executable path expected in the new pane's
-foreground argv, including when a launcher wraps another executable. Launcher
-arguments are shell-quoted, and the process is verified before submitting work.
+Omit `launchers` to use the built-in choices: OpenCode, Pi, Cursor Agent, Claude
+Code, Codex, GitHub Copilot, OMP, Devin, Droid, Kimi, Kilo, Hermes, Qoder CLI,
+Qwen, Mastra Code, Antigravity CLI and Grok. A configured array replaces the
+defaults; `"launchers": []` disables new-agent actions.
+
+Only launchers with an installed Herdr integration (`current` or `outdated`) and
+an executable command appear. The agent does not need to be running already.
+If none are available, both new-agent actions are disabled.
+
+Each launcher has a unique `id`, a display `label`, an `argv` command and Herdr's
+detected `agent` name. `argv[0]` can be an executable path or a command resolved
+through Bash's login environment. Arguments are shell-quoted. `integration`
+optionally overrides the integration name checked for availability; it defaults
+to `agent` (Antigravity CLI uses integration `antigravity-cli` and agent `agy`).
+
+For wrappers or multiple versions of the same agent, set `verifyCommand` to print
+the single absolute executable path expected in the new pane's foreground argv.
+The plugin checks that process before submitting work. All launches wait for
+Herdr to detect the selected agent as ready. Changing or removing the selected
+launcher requires reopening the picker.
+
 Keep personal launcher settings in your own config, outside the plugin checkout.
 
 Polls are bounded to 10-3600 seconds, retries to 30-3600 seconds, command timeouts

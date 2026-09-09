@@ -1,10 +1,51 @@
 import { randomUUID } from "node:crypto";
-import { Effect, Schedule, Schema } from "effect";
-import { RuntimeConfig } from "../config";
+import { Effect, Path, Schedule, Schema } from "effect";
+import { Launcher, RuntimeConfig } from "../config";
 import type { Run, Target } from "../services/github";
 import { Herdr, Pane, type Origin } from "../services/herdr";
 import { Process } from "../services/process";
 import { ActionError } from "./selection";
+
+const resolveLauncher = Effect.fn("Actions.resolveLauncher")(function* (
+  launcher: typeof Launcher.Type,
+  cwd: string,
+) {
+  const process = yield* Process;
+  const executable = (yield* Path.Path).resolve(
+    cwd,
+    yield* process.text(
+      "bash",
+      ["-lc", 'command -v -- "$1"', "workflow-watch", launcher.argv[0]],
+      cwd,
+    ),
+  );
+  yield* process.text("test", ["-f", executable]);
+  yield* process.text("test", ["-x", executable]);
+  return executable;
+});
+
+export const availableLaunchers = Effect.fn("Actions.availableLaunchers")(
+  function* (cwd: string) {
+    const config = yield* RuntimeConfig;
+    if (config.launchers.length === 0) return [];
+    const status = yield* (yield* Process).text(processEnvHerdr(), [
+      "integration",
+      "status",
+    ]);
+    const installed = new Set(
+      [...status.matchAll(/^([^:\s]+): (?:current|outdated)(?:\s|$)/gm)].map(
+        (match) => match[1],
+      ),
+    );
+    return yield* Effect.filter(
+      config.launchers.filter((launcher) =>
+        installed.has(launcher.integration ?? launcher.agent),
+      ),
+      (launcher) => resolveLauncher(launcher, cwd).pipe(Effect.isSuccess),
+      { concurrency: 4 },
+    );
+  },
+);
 
 export const pasteTarget = Effect.fn("Actions.pasteTarget")(function* (
   origin: Origin,
@@ -51,18 +92,29 @@ export const launchAgent = Effect.fn("Actions.launchAgent")(function* (
   target: Target,
   run: Run,
   action: "checkout" | "worktree",
+  launcher: typeof Launcher.Type,
   prompt: string,
 ) {
   const config = yield* RuntimeConfig;
   const process = yield* Process;
   const herdr = yield* Herdr;
-  const launcher = config.launcher;
-  if (!launcher)
+  if (
+    !config.launchers.some((value) =>
+      Schema.toEquivalence(Launcher)(value, launcher),
+    )
+  )
     return yield* new ActionError({
-      message:
-        "Configure launcher.argv, launcher.agent and launcher.verifyCommand first",
+      message: "The selected launcher changed; reopen Workflow Watch",
     });
-  yield* process.text("test", ["-x", launcher.argv[0]]);
+  if (
+    !(yield* availableLaunchers(target.root)).some(
+      (value) => value.id === launcher.id,
+    )
+  )
+    return yield* new ActionError({
+      message: `${launcher.label} is no longer available; reopen Workflow Watch`,
+    });
+  const executable = yield* resolveLauncher(launcher, target.root);
   let pane: typeof Pane.Type;
   if (action === "worktree") {
     const commit = yield* process.run(
@@ -105,18 +157,19 @@ export const launchAgent = Effect.fn("Actions.launchAgent")(function* (
       Schema.Struct({ pane: Pane }),
     )).pane;
   }
-  const [verify, ...verifyArgs] = launcher.verifyCommand;
-  const expected = yield* process.text(
-    verify,
-    verifyArgs,
-    pane.cwd ?? target.root,
-  );
-  if (!expected || expected.includes("\n"))
-    return yield* new ActionError({
-      message: "Launcher verification must return one executable path",
-    });
-  yield* process.text("test", ["-x", expected]);
-  const command = launcher.argv
+  let expected: string | undefined;
+  if (launcher.verifyCommand) {
+    const [verify, ...verifyArgs] = launcher.verifyCommand;
+    expected = yield* process.text(verify, verifyArgs, pane.cwd ?? target.root);
+    if (!expected.startsWith("/") || expected.includes("\n"))
+      return yield* new ActionError({
+        message:
+          "Launcher verification must return one absolute executable path",
+      });
+    yield* process.text("test", ["-f", expected]);
+    yield* process.text("test", ["-x", expected]);
+  }
+  const command = [executable, ...launcher.argv.slice(1)]
     .map((arg) => `'${arg.replaceAll("'", "'\\''")}'`)
     .join(" ");
   yield* process.text(processEnvHerdr(), [
@@ -135,7 +188,8 @@ export const launchAgent = Effect.fn("Actions.launchAgent")(function* (
     if (
       agent.agent !== launcher.agent ||
       !["idle", "done"].includes(agent.agent_status) ||
-      !processes.some((foreground) => foreground.argv.includes(expected))
+      (expected !== undefined &&
+        !processes.some((foreground) => foreground.argv.includes(expected)))
     ) {
       return yield* new ActionError({
         message: `Waiting for ${launcher.agent} in ${pane.pane_id}`,

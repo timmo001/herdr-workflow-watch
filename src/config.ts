@@ -12,6 +12,56 @@ export class ConfigError extends Schema.TaggedError<ConfigError>()(
 ) {}
 
 const Text = Schema.String.check(Schema.isMinLength(1));
+export const Launcher = Schema.Struct({
+  id: Text,
+  label: Text,
+  argv: Schema.NonEmptyArray(Text),
+  agent: Text,
+  integration: Schema.optionalKey(Text),
+  verifyCommand: Schema.optionalKey(Schema.NonEmptyArray(Text)),
+});
+
+const defaultLaunchers: ReadonlyArray<typeof Launcher.Type> = [
+  { id: "opencode", label: "OpenCode", agent: "opencode", argv: ["opencode"] },
+  { id: "pi", label: "Pi", agent: "pi", argv: ["pi"] },
+  {
+    id: "cursor",
+    label: "Cursor Agent",
+    agent: "cursor",
+    argv: ["cursor-agent"],
+  },
+  { id: "claude", label: "Claude Code", agent: "claude", argv: ["claude"] },
+  { id: "codex", label: "Codex", agent: "codex", argv: ["codex"] },
+  {
+    id: "copilot",
+    label: "GitHub Copilot",
+    agent: "copilot",
+    argv: ["copilot"],
+  },
+  { id: "omp", label: "OMP", agent: "omp", argv: ["omp"] },
+  { id: "devin", label: "Devin", agent: "devin", argv: ["devin"] },
+  { id: "droid", label: "Droid", agent: "droid", argv: ["droid"] },
+  { id: "kimi", label: "Kimi", agent: "kimi", argv: ["kimi"] },
+  { id: "kilo", label: "Kilo", agent: "kilo", argv: ["kilo"] },
+  { id: "hermes", label: "Hermes", agent: "hermes", argv: ["hermes"] },
+  { id: "qodercli", label: "Qoder CLI", agent: "qodercli", argv: ["qodercli"] },
+  { id: "qwen", label: "Qwen", agent: "qwen", argv: ["qwen"] },
+  {
+    id: "mastracode",
+    label: "Mastra Code",
+    agent: "mastracode",
+    argv: ["mastracode"],
+  },
+  {
+    id: "antigravity-cli",
+    label: "Antigravity CLI",
+    agent: "agy",
+    integration: "antigravity-cli",
+    argv: ["antigravity-cli"],
+  },
+  { id: "grok", label: "Grok", agent: "grok", argv: ["grok"] },
+];
+
 const Settings = Schema.Struct({
   pollSeconds: Schema.optionalKey(
     Schema.Int.check(Schema.isBetween({ minimum: 10, maximum: 3600 })),
@@ -25,13 +75,7 @@ const Settings = Schema.Struct({
   concurrency: Schema.optionalKey(
     Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 })),
   ),
-  launcher: Schema.optionalKey(
-    Schema.Struct({
-      argv: Schema.NonEmptyArray(Text),
-      agent: Text,
-      verifyCommand: Schema.NonEmptyArray(Text),
-    }),
-  ),
+  launchers: Schema.optionalKey(Schema.Array(Launcher)),
 });
 
 const Environment = Schema.Struct({
@@ -51,7 +95,7 @@ export class RuntimeConfig extends Context.Service<
     readonly retryMs: number;
     readonly timeoutMs: number;
     readonly concurrency: number;
-    readonly launcher: typeof Settings.Type.launcher;
+    readonly launchers: ReadonlyArray<typeof Launcher.Type>;
   }
 >()("herdr-workflow-watch/Config") {
   static readonly layer = Layer.effect(
@@ -64,6 +108,14 @@ export class RuntimeConfig extends Context.Service<
       const settings = yield* Schema.decodeEffect(
         Schema.fromJsonString(Settings),
       )((yield* fs.exists(file)) ? yield* fs.readFileString(file) : "{}");
+      const launchers = settings.launchers ?? defaultLaunchers;
+      if (
+        new Set(launchers.map((launcher) => launcher.id)).size !==
+        launchers.length
+      )
+        return yield* new ConfigError({
+          message: "Launcher IDs must be unique",
+        });
       const state = path.join(
         env.HERDR_PLUGIN_STATE_DIR,
         createHash("sha256")
@@ -82,7 +134,7 @@ export class RuntimeConfig extends Context.Service<
           1000,
         timeoutMs: (settings.timeoutSeconds ?? 30) * 1000,
         concurrency: settings.concurrency ?? 3,
-        launcher: settings.launcher,
+        launchers,
       });
     }).pipe(
       Effect.mapError((cause) => new ConfigError({ message: String(cause) })),

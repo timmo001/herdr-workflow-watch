@@ -64,22 +64,22 @@ export const dispatch = Effect.gen(function* () {
       message: "The selected run changed or recovered; reopen Workflow Watch",
     });
   }
-  if (selection.action === "browser") {
-    yield* commands.text("gh", [
-      "run",
-      "view",
-      String(current.id),
-      "--repo",
-      `github.com/${target.repository}`,
-      "--web",
-    ]);
+  if (!("launcher" in selection)) {
+    if (selection.action === "browser") {
+      yield* commands.text("gh", [
+        "run",
+        "view",
+        String(current.id),
+        "--repo",
+        `github.com/${target.repository}`,
+        "--web",
+      ]);
+    } else {
+      yield* pasteDraft(selection.origin, yield* handoff(target, current));
+    }
     return;
   }
   const prompt = yield* handoff(target, current);
-  if (selection.action === "paste") {
-    yield* pasteDraft(selection.origin, prompt);
-    return;
-  }
   const pane = yield* herdr.pane(selection.origin.pane.pane_id);
   if (
     pane.workspace_id !== selection.origin.workspace ||
@@ -94,6 +94,7 @@ export const dispatch = Effect.gen(function* () {
     target,
     current,
     selection.action,
+    selection.launcher,
     prompt,
   );
 }).pipe(

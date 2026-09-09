@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { Console, Effect, FileSystem, Path, Schema } from "effect";
 import { Prompt } from "effect/unstable/cli";
-import { pasteTarget } from "../actions/agent";
+import { availableLaunchers, pasteTarget } from "../actions/agent";
 import { Action, ActionError, Selection } from "../actions/selection";
-import { RuntimeConfig, pluginId } from "../config";
+import { Launcher, RuntimeConfig, pluginId } from "../config";
 import { GitHub, attention, type Run } from "../services/github";
 import { Herdr, Origin, checkout } from "../services/herdr";
 import { Process } from "../services/process";
@@ -97,6 +97,16 @@ export const picker = Effect.gen(function* () {
     selection = { origin, target, action: "actions" };
   } else {
     const paste = yield* pasteTarget(origin).pipe(Effect.result);
+    const launchers = yield* availableLaunchers(target.root).pipe(
+      Effect.catch((cause) =>
+        Effect.gen(function* () {
+          yield* Console.error(
+            plain(`Agent discovery failed: ${String(cause)}`),
+          );
+          return [];
+        }),
+      ),
+    );
     const action = yield* Prompt.select<typeof Action.Type | null>({
       message: "What next?",
       choices: [
@@ -111,18 +121,30 @@ export const picker = Effect.gen(function* () {
         {
           title: "New agent in this checkout",
           value: "checkout",
-          disabled: !config.launcher,
+          disabled: launchers.length === 0,
         },
         {
           title: "New agent in a new worktree",
           value: "worktree",
-          disabled: !config.launcher,
+          disabled: launchers.length === 0,
         },
         { title: "Close", value: null },
       ],
     });
     if (!action) return;
-    selection = { origin, target, run, action };
+    if (action === "checkout" || action === "worktree") {
+      const launcher = yield* Prompt.select<typeof Launcher.Type | null>({
+        message: "Which agent?",
+        choices: [
+          ...launchers.map((value) => ({ title: plain(value.label), value })),
+          { title: "Close", value: null },
+        ],
+      });
+      if (!launcher) return;
+      selection = { origin, target, run, action, launcher };
+    } else {
+      selection = { origin, target, run, action };
+    }
   }
   const id = randomUUID();
   yield* fs.writeFileString(
