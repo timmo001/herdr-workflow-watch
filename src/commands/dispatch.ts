@@ -1,3 +1,4 @@
+import { Gh } from "@timmo001/effect-gh";
 import { Effect, FileSystem, Path, Schema } from "effect";
 import { launchAgent, pasteDraft } from "../actions/agent";
 import { handoff } from "../actions/prompt";
@@ -5,7 +6,7 @@ import { ActionError, Selection } from "../actions/selection";
 import { RuntimeConfig } from "../config";
 import { GitHub, attention, targetKey } from "../services/github";
 import { checkout, enabled } from "../services/herdr";
-import { Process } from "../services/process";
+import { ProcessError } from "../services/process";
 
 export const dispatch = Effect.gen(function* () {
   const config = yield* RuntimeConfig;
@@ -22,7 +23,23 @@ export const dispatch = Effect.gen(function* () {
   const herdr = yield* HerdrSdk;
   yield* herdr.popups.close();
   const github = yield* GitHub;
-  const commands = yield* Process;
+  const gh = yield* Gh;
+  const browse = Effect.fn("Dispatch.browse")(
+    (args: ReadonlyArray<string>) => gh.execute(args),
+    (effect) =>
+      effect.pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProcessError({
+              command: "gh",
+              message:
+                cause._tag === "GhCommandError"
+                  ? cause.stderr.trim() || `gh exited ${cause.exitCode}`
+                  : String(cause),
+            }),
+        ),
+      ),
+  );
   if (!(yield* enabled))
     return yield* new ActionError({ message: "Workflow Watch is disabled" });
   const snapshot = yield* herdr.session.snapshot();
@@ -43,7 +60,7 @@ export const dispatch = Effect.gen(function* () {
     });
   }
   if (selection.action === "actions") {
-    yield* commands.text("gh", [
+    yield* browse([
       "browse",
       "--actions",
       "--repo",
@@ -65,7 +82,7 @@ export const dispatch = Effect.gen(function* () {
   }
   if (!("launcher" in selection)) {
     if (selection.action === "browser") {
-      yield* commands.text("gh", [
+      yield* browse([
         "run",
         "view",
         String(current.id),

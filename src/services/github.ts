@@ -1,4 +1,5 @@
-import { Context, Effect, Layer, Schema } from "effect";
+import { Api, Gh } from "@timmo001/effect-gh";
+import { Context, Effect, Layer, Schema, Stream } from "effect";
 import { Process } from "./process";
 
 export class GitHubError extends Schema.TaggedError<GitHubError>()(
@@ -82,29 +83,7 @@ export class GitHub extends Context.Service<
     GitHub,
     Effect.gen(function* () {
       const process = yield* Process;
-      const api = Effect.fn("GitHub.api")(
-        function* <A>(
-          endpoint: string,
-          schema: Schema.Codec<A, unknown>,
-          paginate = false,
-        ) {
-          return yield* Schema.decodeEffect(Schema.fromJsonString(schema))(
-            yield* process.text("gh", [
-              "api",
-              "--hostname",
-              "github.com",
-              endpoint,
-              ...(paginate ? ["--paginate", "--slurp"] : []),
-            ]),
-          );
-        },
-        (effect) =>
-          effect.pipe(
-            Effect.mapError(
-              (cause) => new GitHubError({ message: String(cause) }),
-            ),
-          ),
-      );
+      const gh = yield* Gh;
 
       const discover = Effect.fn("GitHub.discover")(
         function* (cwd: string) {
@@ -179,81 +158,122 @@ export class GitHub extends Context.Service<
           ),
       );
 
-      const status = Effect.fn("GitHub.status")(function* (target: Target) {
-        const refs = yield* api(
-          `repos/${target.repository}/git/matching-refs/heads/${encodeURIComponent(target.branch)}`,
-          Schema.Array(
-            Schema.Struct({
-              ref: Schema.String,
-              object: Schema.Struct({ sha: Sha }),
-            }),
-          ),
-        );
-        const ref = refs.find(
-          (value) => value.ref === `refs/heads/${target.branch}`,
-        );
-        if (!ref) return null;
-        const pages = yield* api(
-          `repos/${target.repository}/actions/runs?branch=${encodeURIComponent(target.branch)}&head_sha=${ref.object.sha}&per_page=100`,
-          Schema.Array(
+      const status = Effect.fn("GitHub.status")(
+        function* (target: Target) {
+          const refs = yield* Api.json(
+            {
+              endpoint: `repos/${target.repository}/git/matching-refs/heads/${encodeURIComponent(target.branch)}`,
+              method: "GET",
+              hostname: "github.com",
+            },
+            Schema.Array(
+              Schema.Struct({
+                ref: Schema.String,
+                object: Schema.Struct({ sha: Sha }),
+              }),
+            ),
+          );
+          const ref = refs.find(
+            (value) => value.ref === `refs/heads/${target.branch}`,
+          );
+          if (!ref) return null;
+          const pages = yield* Api.pages(
+            {
+              endpoint: `repos/${target.repository}/actions/runs`,
+              method: "GET",
+              hostname: "github.com",
+              query: {
+                branch: target.branch,
+                head_sha: ref.object.sha,
+                per_page: 100,
+              },
+            },
             Schema.Struct({
               total_count: Schema.Int,
               workflow_runs: Schema.Array(Run),
             }),
-          ),
-          true,
-        );
-        const attempts = new Map<number, Run>();
-        for (const page of pages) {
-          for (const run of page.workflow_runs) {
-            if ((attempts.get(run.id)?.run_attempt ?? 0) <= run.run_attempt)
-              attempts.set(run.id, run);
-          }
-        }
-        if (pages.some((page) => page.total_count > attempts.size))
-          return yield* new GitHubError({
-            message: "GitHub returned an incomplete workflow run list",
-          });
-        return {
-          sha: ref.object.sha,
-          runs: [...attempts.values()].filter(
-            (run) =>
-              run.head_sha === ref.object.sha &&
-              run.head_branch === target.branch,
-          ),
-        };
-      });
-
-      const details = Effect.fn("GitHub.details")(
-        function* (target: Target, run: Run) {
-          const pages = yield* api(
-            `repos/${target.repository}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,
-            Schema.Array(Schema.Struct({ jobs: Schema.Array(Job) })),
-            true,
           );
-          const jobs = pages
-            .flatMap((page) => page.jobs)
-            .filter((job) => attention(job.conclusion));
-          const logs = yield* process.run("gh", [
-            "run",
-            "view",
-            String(run.id),
-            "--repo",
-            `github.com/${target.repository}`,
-            "--attempt",
-            String(run.run_attempt),
-            "--log-failed",
-          ]);
+          const attempts = new Map<number, Run>();
+          for (const page of pages) {
+            for (const run of page.workflow_runs) {
+              if ((attempts.get(run.id)?.run_attempt ?? 0) <= run.run_attempt)
+                attempts.set(run.id, run);
+            }
+          }
+          if (pages.some((page) => page.total_count > attempts.size))
+            return yield* new GitHubError({
+              message: "GitHub returned an incomplete workflow run list",
+            });
           return {
-            jobs,
-            logs:
-              logs.code === 0
-                ? logs.stdout
-                : `Failed-step output unavailable: ${logs.stderr}`,
+            sha: ref.object.sha,
+            runs: [...attempts.values()].filter(
+              (run) =>
+                run.head_sha === ref.object.sha &&
+                run.head_branch === target.branch,
+            ),
           };
         },
         (effect) =>
           effect.pipe(
+            Effect.provideService(Gh, gh),
+            Effect.mapError((cause) =>
+              cause instanceof GitHubError
+                ? cause
+                : new GitHubError({ message: String(cause) }),
+            ),
+          ),
+      );
+
+      const details = Effect.fn("GitHub.details")(
+        function* (target: Target, run: Run) {
+          const pages = yield* Api.pages(
+            {
+              endpoint: `repos/${target.repository}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,
+              method: "GET",
+              hostname: "github.com",
+              query: { per_page: 100 },
+            },
+            Schema.Struct({ jobs: Schema.Array(Job) }),
+          );
+          const jobs = pages
+            .flatMap((page) => page.jobs)
+            .filter((job) => attention(job.conclusion));
+          let stderr = "";
+          const logs = yield* gh
+            .stream([
+              "run",
+              "view",
+              String(run.id),
+              "--repo",
+              `github.com/${target.repository}`,
+              "--attempt",
+              String(run.run_attempt),
+              "--log-failed",
+            ])
+            .pipe(
+              Stream.map((chunk) => {
+                if (chunk._tag === "Stderr") {
+                  stderr += chunk.text;
+                  return "";
+                }
+                return chunk.text;
+              }),
+              Stream.mkString,
+              Effect.map((stdout) => stdout.trim()),
+              Effect.catchTag("GhCommandError", () =>
+                Effect.succeed(
+                  `Failed-step output unavailable: ${stderr.trim()}`,
+                ),
+              ),
+            );
+          return {
+            jobs,
+            logs,
+          };
+        },
+        (effect) =>
+          effect.pipe(
+            Effect.provideService(Gh, gh),
             Effect.mapError(
               (cause) => new GitHubError({ message: String(cause) }),
             ),
