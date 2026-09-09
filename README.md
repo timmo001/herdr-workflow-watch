@@ -153,8 +153,15 @@ Keep personal launcher settings in your own config, outside the plugin checkout.
 
 Polls are bounded to 10-3600 seconds, retries to 30-3600 seconds, command timeouts
 to 5-120 seconds and concurrency to 1-8. Retries are never faster than polling.
-Restart the watcher to apply configuration changes: disable the plugin, wait for
-the watcher lease to disappear, enable it and invoke the start action.
+The watcher checks its installed bundle and configuration every two seconds.
+After a change is stable across two checks, it stops polling, clears its
+indicators and releases its lease before starting a replacement. Invalid config
+edits are reported once per error; the existing watcher keeps running until the
+file is corrected. Missing bundle files during an update defer the restart.
+
+Watchers started before automatic reload was added need one manual restart:
+disable the plugin, wait for the watcher lease to disappear, enable it and invoke
+the start action. Later updates and configuration changes restart automatically.
 
 Errors produce a short Herdr notification with a suggested next step. Invalid
 configuration is reported before startup, including the setting that failed

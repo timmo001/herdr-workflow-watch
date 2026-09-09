@@ -1,3 +1,4 @@
+import { HerdrSdk, type WorkspaceId } from "@herdr/sdk";
 import {
   Cause,
   Clock,
@@ -19,6 +20,7 @@ import {
 } from "../services/github";
 import { checkout, enabled, metadata } from "../services/herdr";
 import { Process, ProcessError } from "../services/process";
+import { waitForUpdate } from "../services/reload";
 
 export const start = Effect.gen(function* () {
   const config = yield* RuntimeConfig;
@@ -39,7 +41,7 @@ type CachedTarget = {
   readonly error: string | null;
 };
 
-export const watch = Effect.gen(function* () {
+const runWatcher = Effect.gen(function* () {
   const config = yield* RuntimeConfig;
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
@@ -72,12 +74,17 @@ export const watch = Effect.gen(function* () {
       release
         ? Effect.tryPromise(() => release()).pipe(
             Effect.catch((cause) =>
-              Effect.logWarning("Could not release watcher lease", cause),
+              Effect.die(
+                new ProcessError({
+                  command: "watch",
+                  message: `Could not release watcher lease: ${String(cause)}`,
+                }),
+              ),
             ),
           )
         : Effect.void,
   );
-  if (!lease) return;
+  if (!lease) return false;
   yield* Effect.logInfo("Workflow watcher started");
   const workspaces = new Map<WorkspaceId, string>();
   const discoveryErrors = new Map<WorkspaceId, string>();
@@ -227,7 +234,7 @@ export const watch = Effect.gen(function* () {
     yield* fs.rename(`${file}.tmp`, file);
   });
 
-  yield* Effect.gen(function* () {
+  return yield* Effect.gen(function* () {
     while (
       yield* enabled.pipe(
         Effect.retry({ times: 5, schedule: Schedule.spaced(1_000) }),
@@ -239,6 +246,17 @@ export const watch = Effect.gen(function* () {
       yield* Effect.sleep(config.pollMs);
     }
     yield* Effect.logInfo("Workflow watcher disabled");
-  }).pipe(Effect.raceFirst(Deferred.await(compromised)));
+    return false;
+  }).pipe(
+    Effect.raceFirst(waitForUpdate.pipe(Effect.as(true))),
+    Effect.raceFirst(Deferred.await(compromised)),
+  );
 }).pipe(Effect.scoped);
-import { HerdrSdk, type WorkspaceId } from "@herdr/sdk";
+
+export const watch = Effect.gen(function* () {
+  const restart = yield* runWatcher;
+  if (restart && (yield* enabled)) {
+    yield* Effect.logInfo("Workflow Watch changed; starting a new watcher");
+    yield* (yield* Process).detach("watch");
+  }
+});

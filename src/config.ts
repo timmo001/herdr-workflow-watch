@@ -94,12 +94,47 @@ const Environment = Schema.Struct({
   HERDR_PLUGIN_STATE_DIR: Text,
 });
 
+export const loadSettings = Effect.fn("Config.loadSettings")(function* (
+  file: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const contents = (yield* fs.exists(file))
+    ? yield* fs.readFileString(file)
+    : "{}";
+  const settings = yield* Schema.decodeEffect(Schema.fromJsonString(Settings))(
+    contents,
+  ).pipe(
+    Effect.mapError(
+      (cause) =>
+        new ConfigError({
+          message: `Invalid config.json: ${cause.message}. Fix the file and try again.`,
+          cause,
+        }),
+    ),
+  );
+  const launchers = settings.launchers ?? defaultLaunchers;
+  if (
+    new Set(launchers.map((launcher) => launcher.id)).size !== launchers.length
+  )
+    return yield* new ConfigError({
+      message:
+        "Launcher IDs in config.json must be unique. Rename the duplicates and try again.",
+    });
+  return {
+    settings,
+    launchers,
+    revision: createHash("sha256").update(contents).digest("hex"),
+  };
+});
+
 export class RuntimeConfig extends Context.Service<
   RuntimeConfig,
   {
     readonly socket: string;
     readonly root: string;
     readonly state: string;
+    readonly settingsFile: string;
+    readonly settingsRevision: string;
     readonly pollMs: number;
     readonly retryMs: number;
     readonly timeoutMs: number;
@@ -127,29 +162,7 @@ export class RuntimeConfig extends Context.Service<
         ),
       );
       const file = path.join(env.HERDR_PLUGIN_CONFIG_DIR, "config.json");
-      const contents = (yield* fs.exists(file))
-        ? yield* fs.readFileString(file)
-        : "{}";
-      const settings = yield* Schema.decodeEffect(
-        Schema.fromJsonString(Settings),
-      )(contents).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ConfigError({
-              message: `Invalid config.json: ${cause.message}. Fix the file and restart Workflow Watch.`,
-              cause,
-            }),
-        ),
-      );
-      const launchers = settings.launchers ?? defaultLaunchers;
-      if (
-        new Set(launchers.map((launcher) => launcher.id)).size !==
-        launchers.length
-      )
-        return yield* new ConfigError({
-          message:
-            "Launcher IDs in config.json must be unique. Rename the duplicates and restart Workflow Watch.",
-        });
+      const { settings, launchers, revision } = yield* loadSettings(file);
       const state = path.join(
         env.HERDR_PLUGIN_STATE_DIR,
         createHash("sha256")
@@ -162,6 +175,8 @@ export class RuntimeConfig extends Context.Service<
         socket: env.HERDR_SOCKET_PATH,
         root: env.HERDR_PLUGIN_ROOT,
         state,
+        settingsFile: file,
+        settingsRevision: revision,
         pollMs: (settings.pollSeconds ?? 30) * 1000,
         retryMs:
           Math.max(settings.retrySeconds ?? 120, settings.pollSeconds ?? 30) *
