@@ -8,13 +8,13 @@ import { start, watch } from "./commands/watch";
 import { RuntimeConfig, pluginId } from "./config";
 import { reportError } from "./errors";
 import { GitHub } from "./services/github";
-import { Herdr } from "./services/herdr";
+import { herdrLayer } from "./services/herdr";
 import { Process } from "./services/process";
 
 const platform = RuntimeConfig.layer.pipe(
   Layer.provideMerge(NodeServices.layer),
 );
-const services = Layer.merge(Process.layer, Herdr.layer).pipe(
+const services = Layer.merge(Process.layer, herdrLayer).pipe(
   Layer.provideMerge(platform),
 );
 const application = GitHub.layer.pipe(Layer.provideMerge(services));

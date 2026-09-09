@@ -4,7 +4,7 @@ import { handoff } from "../actions/prompt";
 import { ActionError, Selection } from "../actions/selection";
 import { RuntimeConfig } from "../config";
 import { GitHub, attention, targetKey } from "../services/github";
-import { Herdr, checkout } from "../services/herdr";
+import { checkout, enabled } from "../services/herdr";
 import { Process } from "../services/process";
 
 export const dispatch = Effect.gen(function* () {
@@ -19,15 +19,15 @@ export const dispatch = Effect.gen(function* () {
     Schema.fromJsonString(Selection),
   )(yield* fs.readFileString(file));
   yield* fs.remove(file);
-  const herdr = yield* Herdr;
-  yield* herdr.request("popup.close", {}, Schema.Unknown);
+  const herdr = yield* HerdrSdk;
+  yield* herdr.popups.close();
   const github = yield* GitHub;
   const commands = yield* Process;
-  if (!(yield* herdr.enabled))
+  if (!(yield* enabled))
     return yield* new ActionError({ message: "Workflow Watch is disabled" });
-  const snapshot = yield* herdr.snapshot;
+  const snapshot = yield* herdr.session.snapshot();
   const workspace = snapshot.workspaces.find(
-    (value) => value.workspace_id === selection.origin.workspace,
+    (value) => value.id === selection.origin.workspace,
   );
   const cwd = workspace && checkout(workspace, snapshot.panes);
   const target = cwd ? yield* github.discover(cwd) : null;
@@ -79,10 +79,10 @@ export const dispatch = Effect.gen(function* () {
     return;
   }
   const prompt = yield* handoff(target, current);
-  const pane = yield* herdr.pane(selection.origin.pane.pane_id);
+  const pane = yield* herdr.panes.get(selection.origin.pane.id);
   if (
-    pane.workspace_id !== selection.origin.workspace ||
-    pane.terminal_id !== selection.origin.pane.terminal_id
+    pane.workspaceId !== selection.origin.workspace ||
+    pane.terminalId !== selection.origin.pane.terminalId
   ) {
     return yield* new ActionError({
       message: "The originating pane changed; reopen Workflow Watch",
@@ -97,3 +97,4 @@ export const dispatch = Effect.gen(function* () {
     prompt,
   );
 });
+import { HerdrSdk } from "@herdr/sdk";

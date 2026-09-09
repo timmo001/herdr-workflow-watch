@@ -1,10 +1,34 @@
-import { Cause, Effect, Schema } from "effect";
+import {
+  HerdrConfigurationError,
+  HerdrInvalidInput,
+  HerdrInvalidResponse,
+  HerdrRequestTimeout,
+  HerdrSdk,
+  HerdrServerError,
+  HerdrTransportError,
+  HerdrUnsupportedProtocol,
+  HerdrUnsupportedResult,
+  herdrSdkLayerFromOptions,
+} from "@herdr/sdk";
+import { Cause, Duration, Effect, Schema } from "effect";
 import { ActionError } from "./actions/selection";
 import { ConfigError } from "./config";
 import { GitHubError } from "./services/github";
-import { Herdr, HerdrError } from "./services/herdr";
 import { ProcessError } from "./services/process";
 import { plain } from "./text";
+
+const isHerdrError = Schema.is(
+  Schema.Union([
+    HerdrConfigurationError,
+    HerdrInvalidInput,
+    HerdrInvalidResponse,
+    HerdrRequestTimeout,
+    HerdrServerError,
+    HerdrTransportError,
+    HerdrUnsupportedProtocol,
+    HerdrUnsupportedResult,
+  ]),
+);
 
 export const reportError = Effect.fn("Errors.reportError")(function* (
   cause: Cause.Cause<unknown>,
@@ -17,7 +41,7 @@ export const reportError = Effect.fn("Errors.reportError")(function* (
       ? error.message
       : error instanceof GitHubError
         ? "Could not read GitHub Actions. Check your connection and gh authentication, then try again."
-        : error instanceof HerdrError
+        : isHerdrError(error)
           ? "Could not complete the Herdr request. Check that the session is running and try again."
           : error instanceof ProcessError
             ? `Could not run ${error.command}. Check the plugin logs for details.`
@@ -28,16 +52,16 @@ export const reportError = Effect.fn("Errors.reportError")(function* (
   yield* Effect.logError(title, cause);
   const socket = process.env.HERDR_SOCKET_PATH;
   if (socket) {
-    yield* Herdr.request(
-      socket,
-      5_000,
-      "notification.show",
-      {
-        title,
-        body: message,
-      },
-      Schema.Unknown,
-    ).pipe(
+    yield* Effect.gen(function* () {
+      yield* (yield* HerdrSdk).notifications.show({ title, body: message });
+    }).pipe(
+      Effect.provide(
+        herdrSdkLayerFromOptions({
+          socketPath: socket,
+          requestTimeout: Duration.seconds(5),
+        }),
+      ),
+      Effect.timeout(5_000),
       Effect.catchCause((notificationCause) =>
         Effect.logWarning(
           "Could not deliver the Herdr error notification",

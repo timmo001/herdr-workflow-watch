@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { HerdrSdk, PaneId, PluginId, WorkspaceId } from "@herdr/sdk";
 import { Cause, Console, Effect, FileSystem, Path, Schema } from "effect";
 import { Prompt } from "effect/unstable/cli";
 import { availableLaunchers, pasteTarget } from "../actions/agent";
@@ -6,43 +7,43 @@ import { Action, ActionError, Selection } from "../actions/selection";
 import { Launcher, RuntimeConfig, pluginId } from "../config";
 import { reportError } from "../errors";
 import { GitHub, attention, type Run } from "../services/github";
-import { Herdr, Origin, checkout } from "../services/herdr";
+import { Origin, checkout } from "../services/herdr";
 import { Process } from "../services/process";
 import { plain } from "../text";
 import { start } from "./watch";
 
 export const open = Effect.gen(function* () {
-  const herdr = yield* Herdr;
+  const herdr = yield* HerdrSdk;
   const context = yield* Schema.decodeEffect(
     Schema.fromJsonString(
       Schema.Struct({
-        workspace_id: Schema.String,
-        focused_pane_id: Schema.String,
+        workspace_id: WorkspaceId,
+        focused_pane_id: PaneId,
       }),
     ),
   )(process.env.HERDR_PLUGIN_CONTEXT_JSON ?? "{}");
-  const pane = yield* herdr.pane(context.focused_pane_id);
-  if (pane.workspace_id !== context.workspace_id)
+  const pane = yield* herdr.panes.get(context.focused_pane_id);
+  if (pane.workspaceId !== context.workspace_id)
     return yield* new ActionError({
       message: "The originating workspace changed",
     });
   const origin: Origin = {
     workspace: context.workspace_id,
     pane,
-    processes: yield* herdr.processes(pane.pane_id),
+    processes:
+      (yield* herdr.panes.processInfo(pane.id)).foregroundProcesses ?? [],
   };
   yield* start;
-  yield* herdr.request(
-    "plugin.pane.open",
-    {
-      plugin_id: pluginId,
-      entrypoint: "picker",
-      placement: "popup",
-      focus: true,
-      env: { WORKFLOW_WATCH_ORIGIN: JSON.stringify(origin) },
+  yield* herdr.plugins.panes.open(PluginId.make(pluginId), {
+    entrypoint: "picker",
+    placement: "popup",
+    focus: true,
+    env: {
+      WORKFLOW_WATCH_ORIGIN: yield* Schema.encodeEffect(
+        Schema.fromJsonString(Origin),
+      )(origin),
     },
-    Schema.Unknown,
-  );
+  });
 });
 
 export const picker = Effect.gen(function* () {
@@ -50,13 +51,13 @@ export const picker = Effect.gen(function* () {
     process.env.WORKFLOW_WATCH_ORIGIN ?? "{}",
   );
   const config = yield* RuntimeConfig;
-  const herdr = yield* Herdr;
+  const herdr = yield* HerdrSdk;
   const github = yield* GitHub;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const snapshot = yield* herdr.snapshot;
+  const snapshot = yield* herdr.session.snapshot();
   const workspace = snapshot.workspaces.find(
-    (value) => value.workspace_id === origin.workspace,
+    (value) => value.id === origin.workspace,
   );
   const cwd = workspace && checkout(workspace, snapshot.panes);
   const target = cwd ? yield* github.discover(cwd) : null;
@@ -150,7 +151,7 @@ export const picker = Effect.gen(function* () {
   const id = randomUUID();
   yield* fs.writeFileString(
     path.join(config.state, `selection-${id}.json`),
-    JSON.stringify(selection),
+    yield* Schema.encodeEffect(Schema.fromJsonString(Selection))(selection),
     { mode: 0o600 },
   );
   yield* (yield* Process).detach("dispatch", { WORKFLOW_WATCH_SELECTION: id });

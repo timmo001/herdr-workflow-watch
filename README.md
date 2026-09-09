@@ -14,7 +14,7 @@ neutral and skipped runs do not. Reruns replace the previous attempt's result.
 
 ## Install
 
-Requires Herdr 0.9.0 or newer, Git, authenticated [GitHub CLI](https://cli.github.com/)
+Requires Herdr 0.9.0 with socket protocol 22, Git, authenticated [GitHub CLI](https://cli.github.com/)
 and [mise](https://mise.jdx.dev/) with the toolchain from `mise.toml` installed.
 The plugin uses your existing `gh` authentication.
 
@@ -173,7 +173,7 @@ workspaces sharing a repository and remote branch share GitHub requests. Startup
 and workspace hooks start it idempotently. It exits after the plugin is disabled
 or the session becomes unavailable, and indicators have a TTL.
 
-Discovery prefers an attached worktree, then the workspace or pane directory.
+Discovery prefers an attached worktree, then a pane directory in the workspace.
 It watches the configured GitHub upstream, falling back to GitHub origin.
 Detached checkouts, missing remote branches, non-Git directories and non-GitHub
 remotes are skipped. Incomplete or failed GitHub requests show unavailable state.
@@ -185,6 +185,14 @@ diagnostics. The socket-specific logs contain watcher and action details.
 ## Development
 
 [mise](https://mise.jdx.dev/) pins Bun and Node and runs the project tasks.
+
+Herdr requests use the Effect-native [`@herdr/sdk`](https://github.com/dmmulroy/herdr-ts-sdk).
+Until it is published, the dependency is pinned to a GitHub commit. The Bun patch
+in `patches/` exposes its TypeScript entrypoint for Bun to bundle. Dependency
+overrides reference our direct Effect and platform dependencies, so updating
+those versions also updates the SDK's dependencies without separate override
+edits. The SDK's own manifest still pins an older beta. Keep the commit, patch
+and lockfile together when updating it, and recheck protocol compatibility.
 
 ```sh
 mise install

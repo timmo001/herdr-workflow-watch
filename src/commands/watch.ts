@@ -17,14 +17,13 @@ import {
   type Status,
   type Target,
 } from "../services/github";
-import { Herdr, checkout } from "../services/herdr";
+import { checkout, enabled, metadata } from "../services/herdr";
 import { Process, ProcessError } from "../services/process";
 
 export const start = Effect.gen(function* () {
   const config = yield* RuntimeConfig;
   const path = yield* Path.Path;
-  const herdr = yield* Herdr;
-  if (!(yield* herdr.enabled)) return;
+  if (!(yield* enabled)) return;
   const held = yield* Effect.tryPromise(() =>
     check(path.join(config.state, "watcher"), {
       realpath: false,
@@ -44,7 +43,7 @@ export const watch = Effect.gen(function* () {
   const config = yield* RuntimeConfig;
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
-  const herdr = yield* Herdr;
+  const herdr = yield* HerdrSdk;
   const github = yield* GitHub;
   const compromised = yield* Deferred.make<never, ProcessError>();
   const lease = yield* Effect.acquireRelease(
@@ -80,26 +79,24 @@ export const watch = Effect.gen(function* () {
   );
   if (!lease) return;
   yield* Effect.logInfo("Workflow watcher started");
-  const workspaces = new Map<string, string>();
-  const discoveryErrors = new Map<string, string>();
+  const workspaces = new Map<WorkspaceId, string>();
+  const discoveryErrors = new Map<WorkspaceId, string>();
   const cached = new Map<string, CachedTarget>();
   yield* Effect.addFinalizer(() =>
     Effect.forEach(
       [...workspaces.keys()],
       (id) =>
-        herdr
-          .metadata(id, null)
-          .pipe(
-            Effect.catch((cause) =>
-              Effect.logDebug("Could not clear workspace indicator", cause),
-            ),
+        metadata(id, null).pipe(
+          Effect.catch((cause) =>
+            Effect.logDebug("Could not clear workspace indicator", cause),
           ),
+        ),
       { concurrency: config.concurrency, discard: true },
     ),
   );
 
   const refresh = Effect.gen(function* () {
-    const snapshot = yield* herdr.snapshot;
+    const snapshot = yield* herdr.session.snapshot();
     const discovered = yield* Effect.forEach(
       snapshot.workspaces,
       Effect.fn("Watch.discover")(function* (workspace) {
@@ -111,20 +108,20 @@ export const watch = Effect.gen(function* () {
         const error =
           result?._tag === "Failure" ? String(result.failure) : null;
         if (error && result?._tag === "Failure") {
-          if (discoveryErrors.get(workspace.workspace_id) !== error)
+          if (discoveryErrors.get(workspace.id) !== error)
             yield* reportError(
               Cause.fail(result.failure),
               "Could not inspect workspace",
-            ).pipe(Effect.annotateLogs({ workspace: workspace.workspace_id }));
-          discoveryErrors.set(workspace.workspace_id, error);
+            ).pipe(Effect.annotateLogs({ workspace: workspace.id }));
+          discoveryErrors.set(workspace.id, error);
         } else {
-          discoveryErrors.delete(workspace.workspace_id);
+          discoveryErrors.delete(workspace.id);
         }
         const key = target ? targetKey(target) : "";
-        if (workspaces.get(workspace.workspace_id) !== key)
-          yield* herdr.metadata(workspace.workspace_id, null);
-        workspaces.set(workspace.workspace_id, key);
-        return { id: workspace.workspace_id, target, error };
+        if (workspaces.get(workspace.id) !== key)
+          yield* metadata(workspace.id, null);
+        workspaces.set(workspace.id, key);
+        return { id: workspace.id, target, error };
       }),
       { concurrency: config.concurrency },
     );
@@ -133,9 +130,7 @@ export const watch = Effect.gen(function* () {
       if (item.target) targets.set(targetKey(item.target), item.target);
     for (const key of cached.keys()) if (!targets.has(key)) cached.delete(key);
     for (const id of workspaces.keys())
-      if (
-        !snapshot.workspaces.some((workspace) => workspace.workspace_id === id)
-      ) {
+      if (!snapshot.workspaces.some((workspace) => workspace.id === id)) {
         workspaces.delete(id);
         discoveryErrors.delete(id);
       }
@@ -197,7 +192,7 @@ export const watch = Effect.gen(function* () {
                 run.conclusion === "neutral" ||
                 run.conclusion === "skipped"),
           );
-        yield* herdr.metadata(
+        yield* metadata(
           item.id,
           error
             ? config.indicatorTemplates.unavailable
@@ -234,7 +229,7 @@ export const watch = Effect.gen(function* () {
 
   yield* Effect.gen(function* () {
     while (
-      yield* herdr.enabled.pipe(
+      yield* enabled.pipe(
         Effect.retry({ times: 5, schedule: Schedule.spaced(1_000) }),
       )
     ) {
@@ -246,3 +241,4 @@ export const watch = Effect.gen(function* () {
     yield* Effect.logInfo("Workflow watcher disabled");
   }).pipe(Effect.raceFirst(Deferred.await(compromised)));
 }).pipe(Effect.scoped);
+import { HerdrSdk, type WorkspaceId } from "@herdr/sdk";
