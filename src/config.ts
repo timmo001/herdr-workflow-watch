@@ -75,6 +75,7 @@ const Settings = Schema.Struct({
   concurrency: Schema.optionalKey(
     Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 })),
   ),
+  showSuccess: Schema.optionalKey(Schema.Boolean),
   launchers: Schema.optionalKey(Schema.Array(Launcher)),
 });
 
@@ -95,6 +96,7 @@ export class RuntimeConfig extends Context.Service<
     readonly retryMs: number;
     readonly timeoutMs: number;
     readonly concurrency: number;
+    readonly showSuccess: boolean;
     readonly launchers: ReadonlyArray<typeof Launcher.Type>;
   }
 >()("herdr-workflow-watch/Config") {
@@ -134,6 +136,7 @@ export class RuntimeConfig extends Context.Service<
           1000,
         timeoutMs: (settings.timeoutSeconds ?? 30) * 1000,
         concurrency: settings.concurrency ?? 3,
+        showSuccess: settings.showSuccess ?? false,
         launchers,
       });
     }).pipe(

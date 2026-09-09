@@ -147,9 +147,25 @@ export const watch = Effect.gen(function* () {
         const error = item.error ?? value?.error ?? null;
         const failures =
           value?.status?.runs.filter((run) => attention(run.conclusion)) ?? [];
+        const success =
+          config.showSuccess &&
+          value?.status?.runs.some((run) => run.conclusion === "success") &&
+          value.status.runs.every(
+            (run) =>
+              run.status === "completed" &&
+              (run.conclusion === "success" ||
+                run.conclusion === "neutral" ||
+                run.conclusion === "skipped"),
+          );
         yield* herdr.metadata(
           item.id,
-          error ? "CI ?" : failures.length ? `CI !${failures.length}` : null,
+          error
+            ? "CI ?"
+            : failures.length
+              ? `CI !${failures.length}`
+              : success
+                ? "CI: ✓"
+                : null,
         );
         return {
           workspace: item.id,

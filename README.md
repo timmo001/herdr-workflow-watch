@@ -4,7 +4,8 @@ GitHub workflow failure indicators for Herdr workspaces.
 
 Watches the current branch of every open GitHub-backed workspace. `CI !2` means
 two workflow runs need attention; `CI ?` means GitHub or repository state could
-not be read. Healthy and ineligible workspaces have no indicator.
+not be read. Healthy workspaces have no indicator by default; enable `showSuccess`
+to display `CI: ✓` when CI has passed. Ineligible workspaces have no indicator.
 
 The watcher resolves the latest pushed commit from GitHub on each poll, including
 all actors and events. Local unpushed commits do not hide its failures. Failed,
@@ -33,7 +34,7 @@ Add the token to your existing Space rows and bind the picker in Herdr's config:
 [ui.sidebar.spaces]
 rows = [
   ["state_icon", "workspace"],
-  ["branch", "git_status", { token = "$timmo_workflow_watch", fg = "#f38ba8", dim = false, rules = [{ equals = "CI ?", fg = "#f9e2af" }] }],
+  ["branch", "git_status", { token = "$timmo_workflow_watch", fg = "#f38ba8", dim = false, rules = [{ equals = "CI ?", fg = "#f9e2af" }, { equals = "CI: ✓", fg = "#a6e3a1" }] }],
 ]
 
 [[keys.command]]
@@ -44,8 +45,8 @@ description = "open workflow failures"
 ```
 
 Reload with `herdr server reload-config`.
-The indicator uses red for failures and amber for unavailable status. Herdr's
-sidebar colours must use hex values.
+The indicator uses red for failures, amber for unavailable status and green for
+success. Herdr's sidebar colours must use hex values.
 
 ## Actions
 
@@ -79,6 +80,7 @@ Create `config.json` in the directory printed by `herdr plugin config-dir`:
   "retrySeconds": 120,
   "timeoutSeconds": 30,
   "concurrency": 3,
+  "showSuccess": true,
   "launchers": [
     {
       "id": "custom-opencode",
@@ -96,6 +98,10 @@ Create `config.json` in the directory printed by `herdr plugin config-dir`:
   ]
 }
 ```
+
+`showSuccess` defaults to `false`. Set it to `true` to show `CI: ✓` when at least
+one run succeeds and all runs have completed with success, neutral or skipped
+conclusions. Pending, cancelled and empty run lists do not show a checkmark.
 
 Omit `launchers` to use the built-in choices: OpenCode, Pi, Cursor Agent, Claude
 Code, Codex, GitHub Copilot, OMP, Devin, Droid, Kimi, Kilo, Hermes, Qoder CLI,
