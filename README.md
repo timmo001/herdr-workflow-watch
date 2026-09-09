@@ -131,7 +131,3 @@ CI installs dependencies with `bun install --frozen-lockfile`. Build, lint and
 the CLI smoke check run independently. Build output is a Bun module in `dist/`.
 Validation is lint, strict types, formatting, build, CLI help and local plugin
 registration/startup. Interactive behaviour is tested manually.
-
-## Licence
-
-[Apache-2.0](LICENSE).
