@@ -4,7 +4,8 @@ GitHub workflow failure indicators for Herdr workspaces.
 
 Watches the current branch of every open GitHub-backed workspace. `CI: !2` means
 two workflow runs need attention; `CI: ?` means GitHub or repository state could
-not be read. Healthy workspaces have no indicator by default; enable `showSuccess`
+not be read. `CI: …` means status is loading; `CI: ↻` means workflows are queued
+or running. Healthy workspaces have no indicator by default; enable `showSuccess`
 to display `CI: ✓` when CI has passed. Ineligible workspaces have no indicator.
 
 The watcher resolves the latest pushed commit from GitHub on each poll, including
@@ -34,7 +35,7 @@ Add the token to your existing Space rows and bind the picker in Herdr's config:
 [ui.sidebar.spaces]
 rows = [
   ["state_icon", "workspace"],
-  ["branch", "git_status", { token = "$timmo_workflow_watch", fg = "#f38ba8", dim = false, rules = [{ equals = "CI: ?", fg = "#f9e2af" }, { equals = "CI: ✓", fg = "#a6e3a1" }] }],
+  ["branch", "git_status", { token = "$timmo_workflow_watch", fg = "#f38ba8", dim = false, rules = [{ equals = "CI: ?", fg = "#f9e2af" }, { equals = "CI: …", fg = "#89b4fa" }, { equals = "CI: ↻", fg = "#f9e2af" }, { equals = "CI: ✓", fg = "#a6e3a1" }] }],
 ]
 
 [[keys.command]]
@@ -45,8 +46,8 @@ description = "open workflow failures"
 ```
 
 Reload with `herdr server reload-config`.
-The indicator uses red for failures, amber for unavailable status and green for
-success. Herdr's sidebar colours must use hex values.
+The indicator uses red for failures, blue for loading, amber for unavailable or
+in-progress status and green for success. Herdr's sidebar colours must use hex values.
 
 ## Actions
 
@@ -84,6 +85,8 @@ Create `config.json` in the directory printed by `herdr plugin config-dir`:
   "indicatorTemplates": {
     "failure": "CI: !{count}",
     "unavailable": "CI: ?",
+    "loading": "CI: …",
+    "inProgress": "CI: ↻",
     "success": "CI: ✓"
   },
   "launchers": [
@@ -108,10 +111,17 @@ Create `config.json` in the directory printed by `herdr plugin config-dir`:
 one run succeeds and all runs have completed with success, neutral or skipped
 conclusions. Pending, cancelled and empty run lists do not show a checkmark.
 
+Loading appears when a GitHub status request starts, including refreshes, and is
+replaced when the poll results are published. Cached targets waiting for their
+next poll or retry keep their existing status. Once loaded, unavailable status
+takes priority over failures, then in-progress runs, then success. In-progress
+includes all runs that have not completed, including queued and waiting runs,
+and does not require `showSuccess`.
+
 `indicatorTemplates` controls each indicator's text, including icons, spacing
 and punctuation. Omitted entries use the defaults shown above. Templates must
 be non-empty strings; every `{count}` in `failure` is replaced with the number
-of runs needing attention. `unavailable` and `success` are literal text.
+of runs needing attention. The other templates are literal text.
 
 For compact icons, use:
 
@@ -121,6 +131,8 @@ For compact icons, use:
   "indicatorTemplates": {
     "failure": "✗ {count}",
     "unavailable": "⚠",
+    "loading": "…",
+    "inProgress": "↻",
     "success": "✓"
   }
 }
@@ -137,15 +149,18 @@ rows = [
     "branch",
     "git_status",
     { token = "$timmo_workflow_watch", fg = "#f38ba8", dim = false, rules = [
-      { equals = "⚠", fg = "#f9e2af" },
-      { equals = "✓", fg = "#a6e3a1" },
+       { equals = "⚠", fg = "#f9e2af" },
+       { equals = "…", fg = "#89b4fa" },
+       { equals = "↻", fg = "#f9e2af" },
+       { equals = "✓", fg = "#a6e3a1" },
     ] },
   ],
 ]
 ```
 
-The whole indicator uses one colour: red for failures, amber for unavailable
-status and green for success. Templates can contain text, symbols or both.
+The whole indicator uses one colour: red for failures, blue for loading, amber
+for unavailable or in-progress status and green for success. Templates can
+contain text, symbols or both.
 The success template still requires `showSuccess: true`.
 
 Omit `launchers` to use the built-in choices: OpenCode, Pi, Cursor Agent, Claude

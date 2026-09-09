@@ -147,6 +147,13 @@ const runWatcher = Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
         const previous = cached.get(key);
         if (previous && now < previous.next) return;
+        yield* Effect.forEach(
+          discovered.filter(
+            (item) => item.target && targetKey(item.target) === key,
+          ),
+          (item) => metadata(item.id, config.indicatorTemplates.loading),
+          { concurrency: config.concurrency, discard: true },
+        );
         const result = yield* github.status(target).pipe(Effect.result);
         const finished = yield* Clock.currentTimeMillis;
         if (result._tag === "Failure") {
@@ -189,6 +196,9 @@ const runWatcher = Effect.gen(function* () {
         const error = item.error ?? value?.error ?? null;
         const failures =
           value?.status?.runs.filter((run) => attention(run.conclusion)) ?? [];
+        const inProgress = value?.status?.runs.some(
+          (run) => run.status !== "completed",
+        );
         const success =
           config.showSuccess &&
           value?.status?.runs.some((run) => run.conclusion === "success") &&
@@ -208,9 +218,11 @@ const runWatcher = Effect.gen(function* () {
                   "{count}",
                   String(failures.length),
                 )
-              : success
-                ? config.indicatorTemplates.success
-                : null,
+              : inProgress
+                ? config.indicatorTemplates.inProgress
+                : success
+                  ? config.indicatorTemplates.success
+                  : null,
         );
         return {
           workspace: item.id,

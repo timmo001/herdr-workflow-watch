@@ -66,6 +66,8 @@ const defaultLaunchers: ReadonlyArray<typeof Launcher.Type> = [
 const IndicatorTemplates = Schema.Struct({
   failure: Schema.optionalKey(Text),
   unavailable: Schema.optionalKey(Text),
+  loading: Schema.optionalKey(Text),
+  inProgress: Schema.optionalKey(Text),
   success: Schema.optionalKey(Text),
 });
 
@@ -187,6 +189,8 @@ export class RuntimeConfig extends Context.Service<
         indicatorTemplates: {
           failure: settings.indicatorTemplates?.failure ?? "CI: !{count}",
           unavailable: settings.indicatorTemplates?.unavailable ?? "CI: ?",
+          loading: settings.indicatorTemplates?.loading ?? "CI: …",
+          inProgress: settings.indicatorTemplates?.inProgress ?? "CI: ↻",
           success: settings.indicatorTemplates?.success ?? "CI: ✓",
         },
         launchers,
