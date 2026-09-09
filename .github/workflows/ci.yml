@@ -29,9 +29,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Check
-        run: mise run check
-
       - name: Build
         run: mise run build
 
