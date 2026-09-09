@@ -1,5 +1,5 @@
 ---
-name: CI
+name: Tests
 
 on:
   pull_request: {}
@@ -16,8 +16,8 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build
+  smoke:
+    name: CLI smoke check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -31,3 +31,6 @@ jobs:
 
       - name: Build
         run: mise run build
+
+      - name: Check CLI help
+        run: bun dist/index.js --help
