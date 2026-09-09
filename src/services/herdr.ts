@@ -42,9 +42,7 @@ const ProcessInfo = Schema.Struct({
 export const Origin = Schema.Struct({
   workspace: Schema.String,
   pane: Pane,
-  processes: Schema.Array(
-    Schema.Struct({ pid: Schema.Int, argv: Schema.Array(Schema.String) }),
-  ),
+  processes: ProcessInfo.fields.foreground_processes,
 });
 export type Origin = typeof Origin.Type;
 

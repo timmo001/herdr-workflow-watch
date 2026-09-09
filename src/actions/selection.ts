@@ -10,24 +10,21 @@ export class ActionError extends Schema.TaggedError<ActionError>()(
   },
 ) {}
 
-export const Action = Schema.Literals([
-  "browser",
-  "paste",
-  "checkout",
-  "worktree",
-]);
+const RunAction = Schema.Literals(["browser", "paste"]);
+export const LaunchAction = Schema.Literals(["checkout", "worktree"]);
+export const Action = Schema.Union([RunAction, LaunchAction]);
 export const Selection = Schema.Union([
   Schema.Struct({
     origin: Origin,
     target: Target,
     run: Run,
-    action: Schema.Literals(["browser", "paste"]),
+    action: RunAction,
   }),
   Schema.Struct({
     origin: Origin,
     target: Target,
     run: Run,
-    action: Schema.Literals(["checkout", "worktree"]),
+    action: LaunchAction,
     launcher: Launcher,
   }),
   Schema.Struct({

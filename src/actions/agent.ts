@@ -4,7 +4,7 @@ import { Launcher, RuntimeConfig } from "../config";
 import type { Run, Target } from "../services/github";
 import { Herdr, Pane, type Origin } from "../services/herdr";
 import { Process } from "../services/process";
-import { ActionError } from "./selection";
+import { ActionError, type LaunchAction } from "./selection";
 
 const resolveLauncher = Effect.fn("Actions.resolveLauncher")(function* (
   launcher: typeof Launcher.Type,
@@ -91,7 +91,7 @@ export const launchAgent = Effect.fn("Actions.launchAgent")(function* (
   origin: Origin,
   target: Target,
   run: Run,
-  action: "checkout" | "worktree",
+  action: typeof LaunchAction.Type,
   launcher: typeof Launcher.Type,
   prompt: string,
 ) {

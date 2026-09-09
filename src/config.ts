@@ -62,6 +62,12 @@ const defaultLaunchers: ReadonlyArray<typeof Launcher.Type> = [
   { id: "grok", label: "Grok", agent: "grok", argv: ["grok"] },
 ];
 
+const IndicatorTemplates = Schema.Struct({
+  failure: Schema.optionalKey(Text),
+  unavailable: Schema.optionalKey(Text),
+  success: Schema.optionalKey(Text),
+});
+
 const Settings = Schema.Struct({
   pollSeconds: Schema.optionalKey(
     Schema.Int.check(Schema.isBetween({ minimum: 10, maximum: 3600 })),
@@ -76,13 +82,7 @@ const Settings = Schema.Struct({
     Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 })),
   ),
   showSuccess: Schema.optionalKey(Schema.Boolean),
-  indicatorTemplates: Schema.optionalKey(
-    Schema.Struct({
-      failure: Schema.optionalKey(Text),
-      unavailable: Schema.optionalKey(Text),
-      success: Schema.optionalKey(Text),
-    }),
-  ),
+  indicatorTemplates: Schema.optionalKey(IndicatorTemplates),
   launchers: Schema.optionalKey(Schema.Array(Launcher)),
 });
 
@@ -104,11 +104,7 @@ export class RuntimeConfig extends Context.Service<
     readonly timeoutMs: number;
     readonly concurrency: number;
     readonly showSuccess: boolean;
-    readonly indicatorTemplates: {
-      readonly failure: string;
-      readonly unavailable: string;
-      readonly success: string;
-    };
+    readonly indicatorTemplates: Required<typeof IndicatorTemplates.Type>;
     readonly launchers: ReadonlyArray<typeof Launcher.Type>;
   }
 >()("herdr-workflow-watch/Config") {
