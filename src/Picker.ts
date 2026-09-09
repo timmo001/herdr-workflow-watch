@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { Console, Effect, FileSystem, Path, Schema } from "effect";
 import { Prompt } from "effect/unstable/cli";
-import { Action, ActionError, pasteTarget, plain } from "./Actions";
+import { Action, ActionError, Selection, pasteTarget, plain } from "./Actions";
 import { RuntimeConfig, pluginId } from "./Config";
-import { GitHub, attention } from "./GitHub";
+import { GitHub, attention, type Run } from "./GitHub";
 import { Herdr, Origin, checkout } from "./Herdr";
 import { Process } from "./Process";
 import { start } from "./Watch";
@@ -60,19 +60,23 @@ export const picker = Effect.gen(function* () {
   const status = target ? yield* github.status(target) : null;
   const failures =
     status?.runs.filter((run) => attention(run.conclusion)) ?? [];
-  if (!target || !status || failures.length === 0) {
+  if (!target) {
     yield* Prompt.select({
-      message:
-        target && status
-          ? "No workflow failures on the latest pushed commit"
-          : "No pushed GitHub branch to watch",
+      message: "No pushed GitHub branch to watch",
       choices: [{ title: "Close", value: "close" }],
     });
     return;
   }
-  const run = yield* Prompt.select({
+  const run = yield* Prompt.select<Run | "actions" | null>({
     message: plain(
-      `${target.repository} / ${target.branch} / ${status.sha.slice(0, 8)}`,
+      [
+        target.repository,
+        target.branch,
+        status ? status.sha.slice(0, 8) : "No pushed GitHub branch to watch",
+        status && failures.length === 0 ? "No workflow failures" : null,
+      ]
+        .filter((value) => value !== null)
+        .join(" / "),
     ),
     choices: [
       ...failures.map((value) => ({
@@ -81,39 +85,47 @@ export const picker = Effect.gen(function* () {
         ),
         value,
       })),
+      { title: "Open all Actions in browser", value: "actions" },
       { title: "Close", value: null },
     ],
   });
   if (!run) return;
-  const paste = yield* pasteTarget(origin).pipe(Effect.result);
-  const action = yield* Prompt.select<typeof Action.Type | null>({
-    message: "What next?",
-    choices: [
-      { title: "Open failure in browser", value: "browser" },
-      {
-        title: "Paste draft into original agent",
-        value: "paste",
-        disabled: paste._tag === "Failure",
-        description: "Insert without submitting; requires the same ready agent",
-      },
-      {
-        title: "New agent in this checkout",
-        value: "checkout",
-        disabled: !config.launcher,
-      },
-      {
-        title: "New agent in a new worktree",
-        value: "worktree",
-        disabled: !config.launcher,
-      },
-      { title: "Close", value: null },
-    ],
-  });
-  if (!action) return;
+  let selection: typeof Selection.Type;
+  if (run === "actions") {
+    selection = { origin, target, action: "actions" };
+  } else {
+    const paste = yield* pasteTarget(origin).pipe(Effect.result);
+    const action = yield* Prompt.select<typeof Action.Type | null>({
+      message: "What next?",
+      choices: [
+        { title: "Open failure in browser", value: "browser" },
+        {
+          title: "Paste draft into original agent",
+          value: "paste",
+          disabled: paste._tag === "Failure",
+          description:
+            "Insert without submitting; requires the same ready agent",
+        },
+        {
+          title: "New agent in this checkout",
+          value: "checkout",
+          disabled: !config.launcher,
+        },
+        {
+          title: "New agent in a new worktree",
+          value: "worktree",
+          disabled: !config.launcher,
+        },
+        { title: "Close", value: null },
+      ],
+    });
+    if (!action) return;
+    selection = { origin, target, run, action };
+  }
   const id = randomUUID();
   yield* fs.writeFileString(
     path.join(config.state, `selection-${id}.json`),
-    JSON.stringify({ origin, target, run, action }),
+    JSON.stringify(selection),
     { mode: 0o600 },
   );
   yield* (yield* Process).detach("dispatch", { WORKFLOW_WATCH_SELECTION: id });

@@ -49,6 +49,9 @@ sidebar colours must use hex values.
 
 ## Actions
 
+Choose **Open all Actions in browser** in the first menu to open the repository's
+`/actions` page, including when there are no failures.
+
 Open `timmo.workflow-watch.open` to pick a failure and then:
 
 - **Open failure in browser:** opens the selected run through `gh`.

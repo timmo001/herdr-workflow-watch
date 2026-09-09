@@ -19,12 +19,19 @@ export const Action = Schema.Literals([
   "checkout",
   "worktree",
 ]);
-export const Selection = Schema.Struct({
-  origin: Origin,
-  target: Target,
-  run: Run,
-  action: Action,
-});
+export const Selection = Schema.Union([
+  Schema.Struct({
+    origin: Origin,
+    target: Target,
+    run: Run,
+    action: Action,
+  }),
+  Schema.Struct({
+    origin: Origin,
+    target: Target,
+    action: Schema.Literal("actions"),
+  }),
+]);
 
 export function plain(text: string) {
   return Array.from(stripVTControlCharacters(text))
@@ -257,6 +264,15 @@ export const dispatch = Effect.gen(function* () {
       message:
         "The originating checkout or branch changed; reopen Workflow Watch",
     });
+  }
+  if (selection.action === "actions") {
+    yield* commands.text("gh", [
+      "browse",
+      "--actions",
+      "--repo",
+      `github.com/${target.repository}`,
+    ]);
+    return;
   }
   const status = yield* github.status(target);
   const current = status?.runs.find((run) => run.id === selection.run.id);
