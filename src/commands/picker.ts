@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { Console, Effect, FileSystem, Path, Schema } from "effect";
+import { Cause, Console, Effect, FileSystem, Path, Schema } from "effect";
 import { Prompt } from "effect/unstable/cli";
 import { availableLaunchers, pasteTarget } from "../actions/agent";
 import { Action, ActionError, Selection } from "../actions/selection";
 import { Launcher, RuntimeConfig, pluginId } from "../config";
+import { reportError } from "../errors";
 import { GitHub, attention, type Run } from "../services/github";
 import { Herdr, Origin, checkout } from "../services/herdr";
 import { Process } from "../services/process";
@@ -101,7 +102,7 @@ export const picker = Effect.gen(function* () {
       Effect.catch((cause) =>
         Effect.gen(function* () {
           yield* Console.error(
-            plain(`Agent discovery failed: ${String(cause)}`),
+            yield* reportError(Cause.fail(cause), "Agent discovery failed"),
           );
           return [];
         }),
@@ -156,9 +157,12 @@ export const picker = Effect.gen(function* () {
   // The worker closes this popup before changing layout or sending input.
   return yield* Effect.never;
 }).pipe(
-  Effect.catch((cause) =>
+  Effect.catchCause((cause) =>
     Effect.gen(function* () {
-      yield* Console.error(plain(String(cause)));
+      if (Cause.hasInterruptsOnly(cause)) return yield* Effect.failCause(cause);
+      yield* Console.error(
+        yield* reportError(cause, "Workflow Watch unavailable"),
+      );
       yield* Prompt.select({
         message: "Workflow Watch unavailable",
         choices: [{ title: "Close", value: "close" }],

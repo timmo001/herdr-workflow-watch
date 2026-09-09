@@ -1,11 +1,12 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Logger } from "effect";
 import { Command } from "effect/unstable/cli";
 import { version } from "../package.json";
 import { dispatch } from "./commands/dispatch";
 import { open, picker } from "./commands/picker";
 import { start, watch } from "./commands/watch";
-import { RuntimeConfig } from "./config";
+import { RuntimeConfig, pluginId } from "./config";
+import { reportError } from "./errors";
 import { GitHub } from "./services/github";
 import { Herdr } from "./services/herdr";
 import { Process } from "./services/process";
@@ -32,6 +33,10 @@ Command.make("herdr-workflow-watch").pipe(
     ),
   ]),
   Command.run({ version }),
-  Effect.provide(NodeServices.layer),
-  NodeRuntime.runMain,
+  Effect.tapCause((cause) => reportError(cause)),
+  Effect.annotateLogs({ plugin: pluginId }),
+  Effect.provide(
+    Layer.merge(NodeServices.layer, Logger.layer([Logger.consoleJson])),
+  ),
+  NodeRuntime.runMain({ disableErrorReporting: true }),
 );

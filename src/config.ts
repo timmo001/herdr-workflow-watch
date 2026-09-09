@@ -8,6 +8,7 @@ export class ConfigError extends Schema.TaggedError<ConfigError>()(
   "ConfigError",
   {
     message: Schema.String,
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 
@@ -113,18 +114,41 @@ export class RuntimeConfig extends Context.Service<
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const env = yield* Schema.decodeUnknownEffect(Environment)(process.env);
+      const env = yield* Schema.decodeUnknownEffect(Environment)(
+        process.env,
+      ).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ConfigError({
+              message:
+                "Workflow Watch is missing its Herdr environment. Start it through the plugin.",
+              cause,
+            }),
+        ),
+      );
       const file = path.join(env.HERDR_PLUGIN_CONFIG_DIR, "config.json");
+      const contents = (yield* fs.exists(file))
+        ? yield* fs.readFileString(file)
+        : "{}";
       const settings = yield* Schema.decodeEffect(
         Schema.fromJsonString(Settings),
-      )((yield* fs.exists(file)) ? yield* fs.readFileString(file) : "{}");
+      )(contents).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ConfigError({
+              message: `Invalid config.json: ${cause.message}. Fix the file and restart Workflow Watch.`,
+              cause,
+            }),
+        ),
+      );
       const launchers = settings.launchers ?? defaultLaunchers;
       if (
         new Set(launchers.map((launcher) => launcher.id)).size !==
         launchers.length
       )
         return yield* new ConfigError({
-          message: "Launcher IDs must be unique",
+          message:
+            "Launcher IDs in config.json must be unique. Rename the duplicates and restart Workflow Watch.",
         });
       const state = path.join(
         env.HERDR_PLUGIN_STATE_DIR,
@@ -153,7 +177,15 @@ export class RuntimeConfig extends Context.Service<
         launchers,
       });
     }).pipe(
-      Effect.mapError((cause) => new ConfigError({ message: String(cause) })),
+      Effect.mapError((cause) =>
+        cause instanceof ConfigError
+          ? cause
+          : new ConfigError({
+              message:
+                "Could not load Workflow Watch configuration. Check the plugin config and state directories.",
+              cause,
+            }),
+      ),
     ),
   );
 }

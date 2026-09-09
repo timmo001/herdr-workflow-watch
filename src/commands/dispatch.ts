@@ -6,7 +6,6 @@ import { RuntimeConfig } from "../config";
 import { GitHub, attention, targetKey } from "../services/github";
 import { Herdr, checkout } from "../services/herdr";
 import { Process } from "../services/process";
-import { plain } from "../text";
 
 export const dispatch = Effect.gen(function* () {
   const config = yield* RuntimeConfig;
@@ -97,17 +96,4 @@ export const dispatch = Effect.gen(function* () {
     selection.launcher,
     prompt,
   );
-}).pipe(
-  Effect.catch((cause) =>
-    Effect.gen(function* () {
-      yield* Effect.logError(String(cause));
-      yield* (yield* Herdr)
-        .request(
-          "notification.show",
-          { title: "Workflow Watch action failed", body: plain(String(cause)) },
-          Schema.Unknown,
-        )
-        .pipe(Effect.catch((error) => Effect.logError(String(error))));
-    }),
-  ),
-);
+});

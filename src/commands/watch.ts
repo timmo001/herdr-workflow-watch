@@ -1,6 +1,15 @@
-import { Clock, Deferred, Effect, FileSystem, Path, Schedule } from "effect";
+import {
+  Cause,
+  Clock,
+  Deferred,
+  Effect,
+  FileSystem,
+  Path,
+  Schedule,
+} from "effect";
 import { check, lock } from "proper-lockfile";
 import { RuntimeConfig } from "../config";
+import { reportError } from "../errors";
 import {
   GitHub,
   attention,
@@ -55,7 +64,7 @@ export const watch = Effect.gen(function* () {
       }),
     ).pipe(
       Effect.catch((cause) =>
-        Effect.logInfo(`Watcher lease not acquired: ${cause}`).pipe(
+        Effect.logInfo("Watcher lease not acquired", cause).pipe(
           Effect.as(null),
         ),
       ),
@@ -63,13 +72,16 @@ export const watch = Effect.gen(function* () {
     (release) =>
       release
         ? Effect.tryPromise(() => release()).pipe(
-            Effect.catch((cause) => Effect.logWarning(String(cause))),
+            Effect.catch((cause) =>
+              Effect.logWarning("Could not release watcher lease", cause),
+            ),
           )
         : Effect.void,
   );
   if (!lease) return;
   yield* Effect.logInfo("Workflow watcher started");
   const workspaces = new Map<string, string>();
+  const discoveryErrors = new Map<string, string>();
   const cached = new Map<string, CachedTarget>();
   yield* Effect.addFinalizer(() =>
     Effect.forEach(
@@ -77,7 +89,11 @@ export const watch = Effect.gen(function* () {
       (id) =>
         herdr
           .metadata(id, null)
-          .pipe(Effect.catch((cause) => Effect.logDebug(String(cause)))),
+          .pipe(
+            Effect.catch((cause) =>
+              Effect.logDebug("Could not clear workspace indicator", cause),
+            ),
+          ),
       { concurrency: config.concurrency, discard: true },
     ),
   );
@@ -94,6 +110,16 @@ export const watch = Effect.gen(function* () {
         const target = result?._tag === "Success" ? result.success : null;
         const error =
           result?._tag === "Failure" ? String(result.failure) : null;
+        if (error && result?._tag === "Failure") {
+          if (discoveryErrors.get(workspace.workspace_id) !== error)
+            yield* reportError(
+              Cause.fail(result.failure),
+              "Could not inspect workspace",
+            ).pipe(Effect.annotateLogs({ workspace: workspace.workspace_id }));
+          discoveryErrors.set(workspace.workspace_id, error);
+        } else {
+          discoveryErrors.delete(workspace.workspace_id);
+        }
         const key = target ? targetKey(target) : "";
         if (workspaces.get(workspace.workspace_id) !== key)
           yield* herdr.metadata(workspace.workspace_id, null);
@@ -109,8 +135,10 @@ export const watch = Effect.gen(function* () {
     for (const id of workspaces.keys())
       if (
         !snapshot.workspaces.some((workspace) => workspace.workspace_id === id)
-      )
+      ) {
         workspaces.delete(id);
+        discoveryErrors.delete(id);
+      }
     yield* Effect.forEach(
       [...targets],
       Effect.fn("Watch.poll")(function* ([key, target]) {
@@ -120,9 +148,21 @@ export const watch = Effect.gen(function* () {
         const result = yield* github.status(target).pipe(Effect.result);
         const finished = yield* Clock.currentTimeMillis;
         if (result._tag === "Failure") {
-          yield* Effect.logWarning(
-            `${target.repository} ${target.branch}: ${result.failure}`,
-          );
+          if (previous?.error !== String(result.failure))
+            yield* reportError(
+              Cause.fail(result.failure),
+              "GitHub Actions unavailable",
+            ).pipe(
+              Effect.annotateLogs({
+                repository: target.repository,
+                branch: target.branch,
+              }),
+            );
+          else
+            yield* Effect.logWarning(
+              `${target.repository} ${target.branch}: GitHub polling still unavailable`,
+              result.failure,
+            );
           cached.set(key, {
             next: finished + config.retryMs,
             status: null,

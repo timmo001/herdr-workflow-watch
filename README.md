@@ -156,6 +156,16 @@ to 5-120 seconds and concurrency to 1-8. Retries are never faster than polling.
 Restart the watcher to apply configuration changes: disable the plugin, wait for
 the watcher lease to disappear, enable it and invoke the start action.
 
+Errors produce a short Herdr notification with a suggested next step. Invalid
+configuration is reported before startup, including the setting that failed
+validation. Full error details and stack traces stay in the Effect JSON logs;
+fatal command errors exit with a non-zero status. If Herdr cannot receive the
+notification, the delivery failure is logged too.
+
+Workspace discovery and GitHub polling errors notify when first encountered or
+when the error changes. A successful check resets this, so a later failure can
+notify again. Repeated identical polling failures stay in the logs.
+
 The plugin uses `HERDR_PLUGIN_CONFIG_DIR` for configuration and a socket-specific
 directory under `HERDR_PLUGIN_STATE_DIR` for its lease, `watch.log`, `dispatch.log`,
 `status.json` and saved failure output. There is one watcher per server socket;

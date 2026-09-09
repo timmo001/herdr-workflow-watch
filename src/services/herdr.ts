@@ -107,76 +107,88 @@ export class Herdr extends Context.Service<
     ) => Effect.Effect<void, HerdrError>;
   }
 >()("herdr-workflow-watch/Herdr") {
+  static readonly request = Effect.fn("Herdr.request")(
+    function* <K extends keyof Requests, A>(
+      socketPath: string,
+      timeoutMs: number,
+      method: K,
+      params: Requests[K],
+      schema: Schema.Codec<A, unknown>,
+    ) {
+      const line = yield* Effect.callback<string, HerdrError>((resume) => {
+        const socket = createConnection(socketPath);
+        let buffer = "";
+        socket.setEncoding("utf8");
+        socket.once("connect", () =>
+          socket.write(`${JSON.stringify({ id: pluginId, method, params })}\n`),
+        );
+        socket.on("data", (chunk) => {
+          buffer += chunk;
+          const end = buffer.indexOf("\n");
+          if (end >= 0) resume(Effect.succeed(buffer.slice(0, end)));
+        });
+        socket.once("error", (cause) =>
+          resume(
+            Effect.fail(
+              new HerdrError({ code: "transport", message: String(cause) }),
+            ),
+          ),
+        );
+        socket.once("end", () =>
+          resume(
+            Effect.fail(
+              new HerdrError({
+                code: "transport",
+                message: "Herdr closed the connection",
+              }),
+            ),
+          ),
+        );
+        return Effect.sync(() => {
+          socket.destroy();
+        });
+      }).pipe(Effect.timeout(timeoutMs));
+      const response = yield* Schema.decodeEffect(
+        Schema.fromJsonString(
+          Schema.Union([
+            Schema.Struct({ result: schema }),
+            Schema.Struct({
+              error: Schema.Struct({
+                code: Schema.String,
+                message: Schema.String,
+              }),
+            }),
+          ]),
+        ),
+      )(line);
+      if ("error" in response) return yield* new HerdrError(response.error);
+      return response.result;
+    },
+    (effect) =>
+      effect.pipe(
+        Effect.mapError((cause) =>
+          cause instanceof HerdrError
+            ? cause
+            : new HerdrError({ code: "response", message: String(cause) }),
+        ),
+      ),
+  );
   static readonly layer = Layer.effect(
     Herdr,
     Effect.gen(function* () {
       const config = yield* RuntimeConfig;
-      const request = Effect.fn("Herdr.request")(
-        function* <K extends keyof Requests, A>(
-          method: K,
-          params: Requests[K],
-          schema: Schema.Codec<A, unknown>,
-        ) {
-          const line = yield* Effect.callback<string, HerdrError>((resume) => {
-            const socket = createConnection(config.socket);
-            let buffer = "";
-            socket.setEncoding("utf8");
-            socket.once("connect", () =>
-              socket.write(
-                `${JSON.stringify({ id: pluginId, method, params })}\n`,
-              ),
-            );
-            socket.on("data", (chunk) => {
-              buffer += chunk;
-              const end = buffer.indexOf("\n");
-              if (end >= 0) resume(Effect.succeed(buffer.slice(0, end)));
-            });
-            socket.once("error", (cause) =>
-              resume(
-                Effect.fail(
-                  new HerdrError({ code: "transport", message: String(cause) }),
-                ),
-              ),
-            );
-            socket.once("end", () =>
-              resume(
-                Effect.fail(
-                  new HerdrError({
-                    code: "transport",
-                    message: "Herdr closed the connection",
-                  }),
-                ),
-              ),
-            );
-            return Effect.sync(() => {
-              socket.destroy();
-            });
-          }).pipe(Effect.timeout(config.timeoutMs));
-          const response = yield* Schema.decodeEffect(
-            Schema.fromJsonString(
-              Schema.Union([
-                Schema.Struct({ result: schema }),
-                Schema.Struct({
-                  error: Schema.Struct({
-                    code: Schema.String,
-                    message: Schema.String,
-                  }),
-                }),
-              ]),
-            ),
-          )(line);
-          if ("error" in response) return yield* new HerdrError(response.error);
-          return response.result;
-        },
-        (effect) =>
-          effect.pipe(
-            Effect.mapError((cause) =>
-              cause instanceof HerdrError
-                ? cause
-                : new HerdrError({ code: "response", message: String(cause) }),
-            ),
-          ),
-      );
+      const request = Effect.fn("Herdr.configuredRequest")(function* <
+        K extends keyof Requests,
+        A,
+      >(method: K, params: Requests[K], schema: Schema.Codec<A, unknown>) {
+        return yield* Herdr.request(
+          config.socket,
+          config.timeoutMs,
+          method,
+          params,
+          schema,
+        );
+      });
       const snapshot = request(
         "session.snapshot",
         {},
