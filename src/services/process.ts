@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import { Context, Effect, Layer, Path, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { RuntimeConfig } from "./Config";
+import { RuntimeConfig } from "../config";
 
 export class ProcessError extends Schema.TaggedError<ProcessError>()(
   "ProcessError",

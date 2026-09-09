@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Schema } from "effect";
-import { Process } from "./Process";
+import { Process } from "./process";
 
 export class GitHubError extends Schema.TaggedError<GitHubError>()(
   "GitHubError",

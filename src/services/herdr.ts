@@ -1,6 +1,6 @@
 import { createConnection } from "node:net";
 import { Context, Effect, Layer, Schema } from "effect";
-import { RuntimeConfig, pluginId, token } from "./Config";
+import { RuntimeConfig, pluginId, token } from "../config";
 
 export class HerdrError extends Schema.TaggedError<HerdrError>()("HerdrError", {
   code: Schema.String,

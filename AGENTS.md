@@ -4,6 +4,9 @@
 
 - TypeScript with Effect v4, Bun and mise.
 - `src/index.ts` owns the Effect CLI entrypoint and platform layers.
+- Use lowercase filenames, with kebab-case for multiword names.
+- `src/commands/` owns CLI workflows, `src/services/` owns external clients and
+  subprocesses, and `src/actions/` owns selection data, agent handling and prompts.
 - `dist/` is generated Bun-targeted module output and stays untracked.
 - The package is private; distribution is through the GitHub repository.
 

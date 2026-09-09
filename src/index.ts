@@ -2,13 +2,13 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { Command } from "effect/unstable/cli";
 import { version } from "../package.json";
-import { dispatch } from "./Actions";
-import { RuntimeConfig } from "./Config";
-import { GitHub } from "./GitHub";
-import { Herdr } from "./Herdr";
-import { open, picker } from "./Picker";
-import { Process } from "./Process";
-import { start, watch } from "./Watch";
+import { dispatch } from "./commands/dispatch";
+import { open, picker } from "./commands/picker";
+import { start, watch } from "./commands/watch";
+import { RuntimeConfig } from "./config";
+import { GitHub } from "./services/github";
+import { Herdr } from "./services/herdr";
+import { Process } from "./services/process";
 
 const platform = RuntimeConfig.layer.pipe(
   Layer.provideMerge(NodeServices.layer),

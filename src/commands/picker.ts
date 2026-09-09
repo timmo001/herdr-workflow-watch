@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { Console, Effect, FileSystem, Path, Schema } from "effect";
 import { Prompt } from "effect/unstable/cli";
-import { Action, ActionError, Selection, pasteTarget, plain } from "./Actions";
-import { RuntimeConfig, pluginId } from "./Config";
-import { GitHub, attention, type Run } from "./GitHub";
-import { Herdr, Origin, checkout } from "./Herdr";
-import { Process } from "./Process";
-import { start } from "./Watch";
+import { pasteTarget } from "../actions/agent";
+import { Action, ActionError, Selection } from "../actions/selection";
+import { RuntimeConfig, pluginId } from "../config";
+import { GitHub, attention, type Run } from "../services/github";
+import { Herdr, Origin, checkout } from "../services/herdr";
+import { Process } from "../services/process";
+import { plain } from "../text";
+import { start } from "./watch";
 
 export const open = Effect.gen(function* () {
   const herdr = yield* Herdr;

@@ -1,15 +1,15 @@
 import { Clock, Deferred, Effect, FileSystem, Path, Schedule } from "effect";
 import { check, lock } from "proper-lockfile";
-import { RuntimeConfig } from "./Config";
+import { RuntimeConfig } from "../config";
 import {
   GitHub,
   attention,
   targetKey,
   type Status,
   type Target,
-} from "./GitHub";
-import { Herdr, checkout } from "./Herdr";
-import { Process, ProcessError } from "./Process";
+} from "../services/github";
+import { Herdr, checkout } from "../services/herdr";
+import { Process, ProcessError } from "../services/process";
 
 export const start = Effect.gen(function* () {
   const config = yield* RuntimeConfig;
