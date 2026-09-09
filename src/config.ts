@@ -83,6 +83,7 @@ const Settings = Schema.Struct({
     Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 })),
   ),
   showSuccess: Schema.optionalKey(Schema.Boolean),
+  indicatorLabel: Schema.optionalKey(Schema.String),
   indicatorTemplates: Schema.optionalKey(IndicatorTemplates),
   launchers: Schema.optionalKey(Schema.Array(Launcher)),
 });
@@ -140,6 +141,7 @@ export class RuntimeConfig extends Context.Service<
     readonly timeoutMs: number;
     readonly concurrency: number;
     readonly showSuccess: boolean;
+    readonly indicatorLabel: string;
     readonly indicatorTemplates: Required<typeof IndicatorTemplates.Type>;
     readonly launchers: ReadonlyArray<typeof Launcher.Type>;
   }
@@ -184,6 +186,7 @@ export class RuntimeConfig extends Context.Service<
         timeoutMs: (settings.timeoutSeconds ?? 30) * 1000,
         concurrency: settings.concurrency ?? 3,
         showSuccess: settings.showSuccess ?? false,
+        indicatorLabel: settings.indicatorLabel ?? "",
         indicatorTemplates: {
           failure: settings.indicatorTemplates?.failure ?? "CI: !{count}",
           unavailable: settings.indicatorTemplates?.unavailable ?? "CI: ?",
