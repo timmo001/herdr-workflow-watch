@@ -81,7 +81,6 @@ Create `config.json` in the directory printed by `herdr plugin config-dir`:
   "timeoutSeconds": 30,
   "concurrency": 3,
   "showSuccess": true,
-  "indicatorLabel": "",
   "indicatorTemplates": {
     "failure": "CI: !{count}",
     "unavailable": "CI: ?",
@@ -118,24 +117,7 @@ For compact icons, use:
 
 ```json
 {
-  "indicatorTemplates": {
-    "failure": "⚡!{count}",
-    "unavailable": "⚡?",
-    "success": "⚡✓"
-  }
-}
-```
-
-Update the sidebar colour rules' `equals` values to match your templates, such
-as `"⚡?"` and `"⚡✓"`. The success template still requires `showSuccess: true`.
-
-For a shared label with a separate colour, set `indicatorLabel`. It can contain
-text, a symbol or both:
-
-```json
-{
   "showSuccess": true,
-  "indicatorLabel": "⚡",
   "indicatorTemplates": {
     "failure": "✗ {count}",
     "unavailable": "⚠",
@@ -144,8 +126,8 @@ text, a symbol or both:
 }
 ```
 
-The shared label is published as `$timmo_workflow_watch_label`; the result stays
-in `$timmo_workflow_watch`. Style them separately in Herdr's sidebar rows:
+Each template is published as one `$timmo_workflow_watch` token. Update the
+sidebar colour rules' `equals` values to match your templates:
 
 ```toml
 [ui.sidebar.spaces]
@@ -154,7 +136,6 @@ rows = [
   [
     "branch",
     "git_status",
-    { token = "$timmo_workflow_watch_label", fg = "#6c7086", dim = true },
     { token = "$timmo_workflow_watch", fg = "#f38ba8", dim = false, rules = [
       { equals = "⚠", fg = "#f9e2af" },
       { equals = "✓", fg = "#a6e3a1" },
@@ -163,12 +144,9 @@ rows = [
 ]
 ```
 
-This keeps the lightning bolt muted and colours the result red, amber or green.
-Herdr inserts its normal separator between sidebar tokens. Both tokens disappear
-when there is no indicator. `indicatorLabel` defaults to `""`; omit it or leave it
-blank to show only the result. Each result template can contain its own icon,
-as above. Colours are configured in Herdr using hex values and apply to each
-whole token.
+The whole indicator uses one colour: red for failures, amber for unavailable
+status and green for success. Templates can contain text, symbols or both.
+The success template still requires `showSuccess: true`.
 
 Omit `launchers` to use the built-in choices: OpenCode, Pi, Cursor Agent, Claude
 Code, Codex, GitHub Copilot, OMP, Devin, Droid, Kimi, Kilo, Hermes, Qoder CLI,

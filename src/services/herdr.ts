@@ -43,11 +43,7 @@ export const metadata = Effect.fn("Herdr.metadata")(function* (
   const config = yield* RuntimeConfig;
   yield* (yield* HerdrSdk).workspaces.reportMetadata(id, {
     source: `plugin:${pluginId}`,
-    tokens: {
-      [token]: value,
-      [`${token}_label`]:
-        value && config.indicatorLabel ? config.indicatorLabel : null,
-    },
+    tokens: { [token]: value },
     ttlMs: Math.min(86_400_000, config.retryMs + config.pollMs * 2),
   });
 });
