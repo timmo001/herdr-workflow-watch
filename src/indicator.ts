@@ -42,7 +42,7 @@ export function indicator(
         `${previous.commitsBehind} ${previous.commitsBehind === 1 ? "commit" : "commits"} ago`,
       )
       .replaceAll("{status}", value);
-  if (config.showIdle && status.runs.length === 0)
-    return [config.indicatorTemplates.idle, value].filter(Boolean).join(" ");
+  if (config.showIdle && status.runs.length === 0 && !value)
+    return config.indicatorTemplates.idle;
   return value;
 }

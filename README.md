@@ -140,8 +140,9 @@ conclusions. Pending, cancelled and empty run lists do not show a checkmark.
   result is labelled with the number of first-parent commits back, for example
   `CI: ✓ (2 commits ago)` or `CI: !1 (1 commit ago)`. Historical success is shown
   regardless of `showSuccess`; that option controls the current commit only.
-- With both enabled, the idle indicator precedes the older result:
-  `CI: ○ CI: ✓ (2 commits ago)` with the default templates.
+- With both enabled, an older result replaces the idle indicator:
+  `CI: ✓ (2 commits ago)` with the default templates. Idle appears only when
+  there is no result to display.
 
 History lookup checks the latest 100 branch runs against the latest 100 commits
 reachable from the pushed tip, following first parents to count distance. Runs
