@@ -30,8 +30,22 @@ export const Run = Schema.Struct({
   html_url: Schema.String,
 });
 export type Run = typeof Run.Type;
-export const Status = Schema.Struct({ sha: Sha, runs: Schema.Array(Run) });
+export const Status = Schema.Struct({
+  sha: Sha,
+  runs: Schema.Array(Run),
+  previous: Schema.NullOr(
+    Schema.Struct({
+      sha: Sha,
+      commitsBehind: Schema.Int,
+      runs: Schema.Array(Run),
+    }),
+  ),
+});
 export type Status = typeof Status.Type;
+const RunPage = Schema.Struct({
+  total_count: Schema.Int,
+  workflow_runs: Schema.Array(Run),
+});
 const Job = Schema.Struct({
   id: Schema.Int,
   name: Schema.String,
@@ -69,6 +83,7 @@ export class GitHub extends Context.Service<
     ) => Effect.Effect<Target | null, GitHubError>;
     readonly status: (
       target: Target,
+      includePrevious?: boolean,
     ) => Effect.Effect<Status | null, GitHubError>;
     readonly details: (
       target: Target,
@@ -158,8 +173,37 @@ export class GitHub extends Context.Service<
           ),
       );
 
+      const runsAt = Effect.fn("GitHub.runsAt")(function* (
+        target: Target,
+        sha: string,
+      ) {
+        const pages = yield* Api.pages(
+          {
+            endpoint: `repos/${target.repository}/actions/runs`,
+            method: "GET",
+            hostname: "github.com",
+            query: { branch: target.branch, head_sha: sha, per_page: 100 },
+          },
+          RunPage,
+        );
+        const attempts = new Map<number, Run>();
+        for (const page of pages) {
+          for (const run of page.workflow_runs) {
+            if ((attempts.get(run.id)?.run_attempt ?? 0) <= run.run_attempt)
+              attempts.set(run.id, run);
+          }
+        }
+        if (pages.some((page) => page.total_count > attempts.size))
+          return yield* new GitHubError({
+            message: "GitHub returned an incomplete workflow run list",
+          });
+        return [...attempts.values()].filter(
+          (run) => run.head_sha === sha && run.head_branch === target.branch,
+        );
+      });
+
       const status = Effect.fn("GitHub.status")(
-        function* (target: Target) {
+        function* (target: Target, includePrevious = false) {
           const refs = yield* Api.json(
             {
               endpoint: `repos/${target.repository}/git/matching-refs/heads/${encodeURIComponent(target.branch)}`,
@@ -177,41 +221,58 @@ export class GitHub extends Context.Service<
             (value) => value.ref === `refs/heads/${target.branch}`,
           );
           if (!ref) return null;
-          const pages = yield* Api.pages(
+          const runs = yield* runsAt(target, ref.object.sha);
+          const current: Status = { sha: ref.object.sha, runs, previous: null };
+          if (runs.length > 0 || !includePrevious) return current;
+          const recent = yield* Api.json(
             {
               endpoint: `repos/${target.repository}/actions/runs`,
               method: "GET",
               hostname: "github.com",
-              query: {
-                branch: target.branch,
-                head_sha: ref.object.sha,
-                per_page: 100,
-              },
+              query: { branch: target.branch, per_page: 100 },
             },
-            Schema.Struct({
-              total_count: Schema.Int,
-              workflow_runs: Schema.Array(Run),
-            }),
+            RunPage,
           );
-          const attempts = new Map<number, Run>();
-          for (const page of pages) {
-            for (const run of page.workflow_runs) {
-              if ((attempts.get(run.id)?.run_attempt ?? 0) <= run.run_attempt)
-                attempts.set(run.id, run);
-            }
-          }
-          if (pages.some((page) => page.total_count > attempts.size))
-            return yield* new GitHubError({
-              message: "GitHub returned an incomplete workflow run list",
-            });
-          return {
-            sha: ref.object.sha,
-            runs: [...attempts.values()].filter(
-              (run) =>
-                run.head_sha === ref.object.sha &&
-                run.head_branch === target.branch,
+          if (recent.workflow_runs.length === 0) return current;
+          const commits = yield* Api.json(
+            {
+              endpoint: `repos/${target.repository}/commits`,
+              method: "GET",
+              hostname: "github.com",
+              query: { sha: ref.object.sha, per_page: 100 },
+            },
+            Schema.Array(
+              Schema.Struct({
+                sha: Sha,
+                parents: Schema.Array(Schema.Struct({ sha: Sha })),
+              }),
             ),
-          };
+          );
+          const parents = new Map(
+            commits.map((commit) => [commit.sha, commit.parents[0]?.sha]),
+          );
+          const candidates = new Set(
+            recent.workflow_runs
+              .filter((run) => run.head_branch === target.branch)
+              .map((run) => run.head_sha),
+          );
+          let sha = parents.get(current.sha);
+          for (
+            let commitsBehind = 1;
+            sha && parents.has(sha) && commitsBehind <= 100;
+            commitsBehind++
+          ) {
+            if (candidates.has(sha)) {
+              const previousRuns = yield* runsAt(target, sha);
+              if (previousRuns.length > 0)
+                return {
+                  ...current,
+                  previous: { sha, commitsBehind, runs: previousRuns },
+                };
+            }
+            sha = parents.get(sha);
+          }
+          return current;
         },
         (effect) =>
           effect.pipe(

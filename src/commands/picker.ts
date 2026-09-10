@@ -6,6 +6,7 @@ import { availableLaunchers, pasteTarget } from "../actions/agent";
 import { Action, ActionError, Selection } from "../actions/selection";
 import { Launcher, RuntimeConfig, pluginId } from "../config";
 import { reportError } from "../errors";
+import { indicator } from "../indicator";
 import { GitHub, attention, type Run } from "../services/github";
 import { Origin, checkout } from "../services/herdr";
 import { Process } from "../services/process";
@@ -61,7 +62,9 @@ export const picker = Effect.gen(function* () {
   );
   const cwd = workspace && checkout(workspace, snapshot.panes);
   const target = cwd ? yield* github.discover(cwd) : null;
-  const status = target ? yield* github.status(target) : null;
+  const status = target
+    ? yield* github.status(target, config.showPrevious)
+    : null;
   const failures =
     status?.runs.filter((run) => attention(run.conclusion)) ?? [];
   if (!target) {
@@ -77,7 +80,15 @@ export const picker = Effect.gen(function* () {
         target.repository,
         target.branch,
         status ? status.sha.slice(0, 8) : "No pushed GitHub branch to watch",
-        status && failures.length === 0 ? "No workflow failures" : null,
+        status?.runs.length === 0
+          ? "No runs for the latest commit"
+          : status && failures.length === 0
+            ? "No workflow failures"
+            : null,
+        status?.previous
+          ? (indicator(status, config) ??
+            "Previous runs have no pass/fail result")
+          : null,
       ]
         .filter((value) => value !== null)
         .join(" / "),

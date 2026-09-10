@@ -7,6 +7,9 @@ two workflow runs need attention; `CI: ?` means GitHub or repository state could
 not be read. `CI: …` means status is loading; `CI: ↻` means workflows are queued
 or running. Healthy workspaces have no indicator by default; enable `showSuccess`
 to display `CI: ✓` when CI has passed. Ineligible workspaces have no indicator.
+Enable `showIdle` for `CI: ○` when the latest pushed commit has no runs, and
+`showPrevious` to show an older result with its commit distance in that case.
+Both options default to `false`.
 
 The watcher resolves the latest pushed commit from GitHub on each poll, including
 all actors and events. Local unpushed commits do not hide its failures. Failed,
@@ -82,12 +85,16 @@ Create `config.json` in the directory printed by `herdr plugin config-dir`:
   "timeoutSeconds": 30,
   "concurrency": 3,
   "showSuccess": true,
+  "showIdle": true,
+  "showPrevious": true,
   "indicatorTemplates": {
     "failure": "CI: !{count}",
     "unavailable": "CI: ?",
     "loading": "CI: …",
     "inProgress": "CI: ↻",
-    "success": "CI: ✓"
+    "success": "CI: ✓",
+    "idle": "CI: ○",
+    "previous": "{status} ({distance})"
   },
   "launchers": [
     {
@@ -125,6 +132,31 @@ Staggering spreads request bursts; increase `pollSeconds` to reduce idle API use
 one run succeeds and all runs have completed with success, neutral or skipped
 conclusions. Pending, cancelled and empty run lists do not show a checkmark.
 
+`showIdle` and `showPrevious` also default to `false` and are independent:
+
+- `showIdle` displays the idle template when the latest pushed commit has no runs.
+- `showPrevious` falls back to the nearest earlier first-parent commit with runs
+  found in the recent history window, only when the latest commit has none. Its
+  result is labelled with the number of first-parent commits back, for example
+  `CI: ✓ (2 commits ago)` or `CI: !1 (1 commit ago)`. Historical success is shown
+  regardless of `showSuccess`; that option controls the current commit only.
+- With both enabled, the idle indicator precedes the older result:
+  `CI: ○ CI: ✓ (2 commits ago)` with the default templates.
+
+History lookup checks the latest 100 branch runs against the latest 100 commits
+reachable from the pushed tip, following first parents to count distance. Runs
+outside that window or on commits removed from the branch are not used. Once a
+commit is selected, all its runs are fetched, including rerun attempts. Previous
+results are refreshed on each poll; unfinished previous runs use the 3-second
+interval too. There are no history requests when `showPrevious` is disabled or
+the latest commit already has runs.
+
+Cancelled, neutral or skipped previous runs alone have no pass/fail indicator.
+An eligible branch with no usable previous result shows only idle, if enabled.
+Missing branches and ineligible workspaces still have no indicator; lookup
+errors show unavailable. The picker labels the previous result separately from
+current failures; **Open all Actions in browser** gives access to older runs.
+
 Loading appears when a GitHub status request starts, including refreshes, and is
 replaced when the poll results are published. Cached targets waiting for their
 next poll or retry keep their existing status. Once loaded, unavailable status
@@ -135,19 +167,26 @@ and does not require `showSuccess`.
 `indicatorTemplates` controls each indicator's text, including icons, spacing
 and punctuation. Omitted entries use the defaults shown above. Templates must
 be non-empty strings; every `{count}` in `failure` is replaced with the number
-of runs needing attention. The other templates are literal text.
+of runs needing attention. The `previous` template wraps an older result:
+`{status}` is its failure, in-progress or success indicator and `{distance}` is
+text such as `1 commit ago` or `2 commits ago`. The other templates are literal
+text.
 
 For compact icons, use:
 
 ```json
 {
   "showSuccess": true,
+  "showIdle": true,
+  "showPrevious": true,
   "indicatorTemplates": {
     "failure": "✗ {count}",
     "unavailable": "⚠",
     "loading": "…",
     "inProgress": "↻",
-    "success": "✓"
+    "success": "✓",
+    "idle": "○",
+    "previous": "{status} ({distance})"
   }
 }
 ```
@@ -167,6 +206,7 @@ rows = [
        { equals = "…", fg = "#89b4fa" },
        { equals = "↻", fg = "#f9e2af" },
        { equals = "✓", fg = "#a6e3a1" },
+       { equals = "○", fg = "#9399b2" },
     ] },
   ],
 ]
@@ -175,7 +215,9 @@ rows = [
 The whole indicator uses one colour: red for failures, blue for loading, amber
 for unavailable or in-progress status and green for success. Templates can
 contain text, symbols or both.
-The success template still requires `showSuccess: true`.
+For current results, the success template requires `showSuccess: true`; older
+successes require `showPrevious: true`. Combined historical indicators contain
+additional text, so the exact-match colour rules above do not match them.
 
 Omit `launchers` to use the built-in choices: OpenCode, Pi, Cursor Agent, Claude
 Code, Codex, GitHub Copilot, OMP, Devin, Droid, Kimi, Kilo, Hermes, Qoder CLI,

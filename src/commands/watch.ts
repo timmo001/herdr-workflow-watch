@@ -11,9 +11,9 @@ import {
 import { check, lock } from "proper-lockfile";
 import { RuntimeConfig } from "../config";
 import { reportError } from "../errors";
+import { indicator } from "../indicator";
 import {
   GitHub,
-  attention,
   targetKey,
   type Status,
   type Target,
@@ -42,6 +42,12 @@ type CachedTarget = {
 };
 
 const activePollMs = 3_000;
+
+function unfinished(status: Status | null) {
+  return (status?.previous?.runs ?? status?.runs)?.some(
+    (run) => run.status !== "completed",
+  );
+}
 
 const runWatcher = Effect.gen(function* () {
   const config = yield* RuntimeConfig;
@@ -174,7 +180,9 @@ const runWatcher = Effect.gen(function* () {
           { concurrency: config.concurrency, discard: true },
         );
         const started = yield* Clock.currentTimeMillis;
-        const result = yield* github.status(target).pipe(Effect.result);
+        const result = yield* github
+          .status(target, config.showPrevious)
+          .pipe(Effect.result);
         const finished = yield* Clock.currentTimeMillis;
         if (result._tag === "Failure") {
           if (previous?.error !== String(result.failure))
@@ -201,18 +209,14 @@ const runWatcher = Effect.gen(function* () {
           cached.set(key, {
             next:
               finished +
-              (result.success?.runs.some((run) => run.status !== "completed")
-                ? activePollMs
-                : config.pollMs),
+              (unfinished(result.success) ? activePollMs : config.pollMs),
             status: result.success,
             error: null,
           });
         }
         nextPoll =
           started +
-          ([...cached.values()].some((value) =>
-            value.status?.runs.some((run) => run.status !== "completed"),
-          )
+          ([...cached.values()].some((value) => unfinished(value.status))
             ? activePollMs
             : config.pollMs) /
             targets.size;
@@ -226,35 +230,11 @@ const runWatcher = Effect.gen(function* () {
           ? cached.get(targetKey(item.target))
           : undefined;
         const error = item.error ?? value?.error ?? null;
-        const failures =
-          value?.status?.runs.filter((run) => attention(run.conclusion)) ?? [];
-        const inProgress = value?.status?.runs.some(
-          (run) => run.status !== "completed",
-        );
-        const success =
-          config.showSuccess &&
-          value?.status?.runs.some((run) => run.conclusion === "success") &&
-          value.status.runs.every(
-            (run) =>
-              run.status === "completed" &&
-              (run.conclusion === "success" ||
-                run.conclusion === "neutral" ||
-                run.conclusion === "skipped"),
-          );
         yield* metadata(
           item.id,
           error
             ? config.indicatorTemplates.unavailable
-            : failures.length
-              ? config.indicatorTemplates.failure.replaceAll(
-                  "{count}",
-                  String(failures.length),
-                )
-              : inProgress
-                ? config.indicatorTemplates.inProgress
-                : success
-                  ? config.indicatorTemplates.success
-                  : null,
+            : indicator(value?.status ?? null, config),
         );
         return {
           workspace: item.id,
