@@ -36,6 +36,7 @@ export function indicator(
         : null;
   if (previous && value)
     value = config.indicatorTemplates.previous
+      .replaceAll("{count}", String(previous.commitsBehind))
       .replaceAll(
         "{distance}",
         `${previous.commitsBehind} ${previous.commitsBehind === 1 ? "commit" : "commits"} ago`,

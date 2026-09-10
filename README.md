@@ -169,8 +169,9 @@ and punctuation. Omitted entries use the defaults shown above. Templates must
 be non-empty strings; every `{count}` in `failure` is replaced with the number
 of runs needing attention. The `previous` template wraps an older result:
 `{status}` is its failure, in-progress or success indicator and `{distance}` is
-text such as `1 commit ago` or `2 commits ago`. The other templates are literal
-text.
+text such as `1 commit ago` or `2 commits ago`. Use `{count}` for just the commit
+distance, for example `"{status} ↶{count}"` renders `✓ ↶2`. The other templates
+are literal text.
 
 For compact icons, use:
 
