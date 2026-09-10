@@ -41,6 +41,8 @@ type CachedTarget = {
   readonly error: string | null;
 };
 
+const activePollMs = 3_000;
+
 const runWatcher = Effect.gen(function* () {
   const config = yield* RuntimeConfig;
   const path = yield* Path.Path;
@@ -171,8 +173,7 @@ const runWatcher = Effect.gen(function* () {
           (item) => metadata(item.id, config.indicatorTemplates.loading),
           { concurrency: config.concurrency, discard: true },
         );
-        nextPoll =
-          (yield* Clock.currentTimeMillis) + config.pollMs / targets.size;
+        const started = yield* Clock.currentTimeMillis;
         const result = yield* github.status(target).pipe(Effect.result);
         const finished = yield* Clock.currentTimeMillis;
         if (result._tag === "Failure") {
@@ -198,11 +199,23 @@ const runWatcher = Effect.gen(function* () {
           });
         } else {
           cached.set(key, {
-            next: finished + config.pollMs,
+            next:
+              finished +
+              (result.success?.runs.some((run) => run.status !== "completed")
+                ? activePollMs
+                : config.pollMs),
             status: result.success,
             error: null,
           });
         }
+        nextPoll =
+          started +
+          ([...cached.values()].some((value) =>
+            value.status?.runs.some((run) => run.status !== "completed"),
+          )
+            ? activePollMs
+            : config.pollMs) /
+            targets.size;
       }),
       { concurrency: config.concurrency, discard: true },
     );
