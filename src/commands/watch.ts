@@ -102,7 +102,7 @@ const runWatcher = Effect.gen(function* () {
     ),
   );
 
-  const refresh = Effect.gen(function* () {
+  const discover = Effect.gen(function* () {
     const snapshot = yield* herdr.session.snapshot();
     const discovered = yield* Effect.forEach(
       snapshot.workspaces,
@@ -141,12 +141,29 @@ const runWatcher = Effect.gen(function* () {
         workspaces.delete(id);
         discoveryErrors.delete(id);
       }
+    return { discovered, targets };
+  });
+
+  let discovery: Effect.Success<typeof discover> | undefined;
+  let nextDiscovery = 0;
+  let nextPoll = 0;
+  const refresh = Effect.gen(function* () {
+    if (!discovery || (yield* Clock.currentTimeMillis) >= nextDiscovery) {
+      discovery = yield* discover;
+      nextDiscovery = (yield* Clock.currentTimeMillis) + config.pollMs;
+    }
+    const { discovered, targets } = discovery;
     yield* Effect.forEach(
-      [...targets],
+      [...targets]
+        .sort(
+          ([left], [right]) =>
+            (cached.get(left)?.next ?? 0) - (cached.get(right)?.next ?? 0),
+        )
+        .slice(0, 1),
       Effect.fn("Watch.poll")(function* ([key, target]) {
         const now = yield* Clock.currentTimeMillis;
         const previous = cached.get(key);
-        if (previous && now < previous.next) return;
+        if (now < nextPoll || (previous && now < previous.next)) return;
         yield* Effect.forEach(
           discovered.filter(
             (item) => item.target && targetKey(item.target) === key,
@@ -154,6 +171,8 @@ const runWatcher = Effect.gen(function* () {
           (item) => metadata(item.id, config.indicatorTemplates.loading),
           { concurrency: config.concurrency, discard: true },
         );
+        nextPoll =
+          (yield* Clock.currentTimeMillis) + config.pollMs / targets.size;
         const result = yield* github.status(target).pipe(Effect.result);
         const finished = yield* Clock.currentTimeMillis;
         if (result._tag === "Failure") {
@@ -244,6 +263,13 @@ const runWatcher = Effect.gen(function* () {
       { mode: 0o600 },
     );
     yield* fs.rename(`${file}.tmp`, file);
+    const nextRefresh = Math.min(
+      nextDiscovery,
+      ...[...targets.keys()].map((key) =>
+        Math.max(nextPoll, cached.get(key)?.next ?? 0),
+      ),
+    );
+    return Math.max(0, nextRefresh - (yield* Clock.currentTimeMillis));
   });
 
   return yield* Effect.gen(function* () {
@@ -252,10 +278,10 @@ const runWatcher = Effect.gen(function* () {
         Effect.retry({ times: 5, schedule: Schedule.spaced(1_000) }),
       )
     ) {
-      yield* refresh.pipe(
+      const delay = yield* refresh.pipe(
         Effect.retry({ times: 5, schedule: Schedule.spaced(1_000) }),
       );
-      yield* Effect.sleep(config.pollMs);
+      yield* Effect.sleep(delay);
     }
     yield* Effect.logInfo("Workflow watcher disabled");
     return false;

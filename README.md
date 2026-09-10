@@ -107,6 +107,14 @@ Create `config.json` in the directory printed by `herdr plugin config-dir`:
 }
 ```
 
+GitHub polls are staggered across `pollSeconds` (30 by default), including on
+startup. With three unique repository/branch targets, a poll starts roughly
+every 10 seconds. Workspaces sharing a target share its result. Polls run one
+at a time; slow requests can extend the interval. Failed targets wait at least
+`retrySeconds` before retrying. Workspace discovery still runs every
+`pollSeconds`, with `concurrency` controlling discovery and indicator updates.
+Staggering spreads request bursts; increase `pollSeconds` to reduce total API use.
+
 `showSuccess` defaults to `false`. Set it to `true` to show `CI: ✓` when at least
 one run succeeds and all runs have completed with success, neutral or skipped
 conclusions. Pending, cancelled and empty run lists do not show a checkmark.
