@@ -41,11 +41,19 @@ export const metadata = Effect.fn("Herdr.metadata")(function* (
   value: string | null,
 ) {
   const config = yield* RuntimeConfig;
-  yield* (yield* HerdrSdk).workspaces.reportMetadata(id, {
-    source: `plugin:${pluginId}`,
-    tokens: { [token]: value },
-    ttlMs: Math.min(86_400_000, config.retryMs + config.pollMs * 2),
-  });
+  yield* (yield* HerdrSdk).workspaces
+    .reportMetadata(id, {
+      source: `plugin:${pluginId}`,
+      tokens: { [token]: value },
+      ttlMs: Math.min(86_400_000, config.retryMs + config.pollMs * 2),
+    })
+    .pipe(
+      Effect.catchTag("HerdrServerError", (error) =>
+        error.serverCode === "workspace_not_found"
+          ? Effect.void
+          : Effect.fail(error),
+      ),
+    );
 });
 
 export function checkout(workspace: Workspace, panes: ReadonlyArray<Pane>) {

@@ -256,8 +256,10 @@ Watchers started before automatic reload was added need one manual restart:
 disable the plugin, wait for the watcher lease to disappear, enable it and invoke
 the start action. Later updates and configuration changes restart automatically.
 
-Errors produce a short Herdr notification with a suggested next step. Invalid
-configuration is reported before startup, including the setting that failed
+Errors produce a short Herdr notification with the cause, a recovery command and
+the log location. Fatal watcher errors include the start action to resume polling.
+Workspace removal during a refresh is ignored until the next discovery pass.
+Invalid configuration is reported before startup, including the setting that failed
 validation. Full error details and stack traces stay in the Effect JSON logs;
 fatal command errors exit with a non-zero status. If Herdr cannot receive the
 notification, the delivery failure is logged too.

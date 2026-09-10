@@ -1,8 +1,16 @@
 import { createHash } from "node:crypto";
+import { join } from "node:path";
 import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
 
 export const pluginId = "timmo.workflow-watch";
 export const token = "timmo_workflow_watch";
+
+export function stateDirectory(root: string, socket: string) {
+  return join(
+    root,
+    createHash("sha256").update(socket).digest("hex").slice(0, 20),
+  );
+}
 
 export class ConfigError extends Schema.TaggedError<ConfigError>()(
   "ConfigError",
@@ -171,12 +179,9 @@ export class RuntimeConfig extends Context.Service<
       );
       const file = path.join(env.HERDR_PLUGIN_CONFIG_DIR, "config.json");
       const { settings, launchers, revision } = yield* loadSettings(file);
-      const state = path.join(
+      const state = stateDirectory(
         env.HERDR_PLUGIN_STATE_DIR,
-        createHash("sha256")
-          .update(env.HERDR_SOCKET_PATH)
-          .digest("hex")
-          .slice(0, 20),
+        env.HERDR_SOCKET_PATH,
       );
       yield* fs.makeDirectory(state, { recursive: true, mode: 0o700 });
       return RuntimeConfig.of({
