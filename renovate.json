@@ -19,11 +19,6 @@
       "description": "Use the shorter release delay for Effect dependencies.",
       "matchPackageNames": ["effect", "@effect/platform-node", "@effect/tsgo"],
       "minimumReleaseAge": "2 hours"
-    },
-    {
-      "description": "Keep Effect at rc.112 for the pinned @herdr/sdk Config.string and Config.mapOrFail APIs.",
-      "matchPackageNames": ["effect", "@effect/platform-node"],
-      "allowedVersions": "4.0.0-rc.112"
     }
   ]
 }
