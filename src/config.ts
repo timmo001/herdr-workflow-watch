@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
 
 export const pluginId = "timmo.workflow-watch";
+
 export const token = "timmo_workflow_watch";
 
 export function stateDirectory(root: string, socket: string) {
@@ -21,6 +22,7 @@ export class ConfigError extends Schema.TaggedError<ConfigError>()(
 ) {}
 
 const Text = Schema.String.check(Schema.isMinLength(1));
+
 export const Launcher = Schema.Struct({
   id: Text,
   label: Text,
@@ -112,9 +114,11 @@ export const loadSettings = Effect.fn("Config.loadSettings")(function* (
   file: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
+
   const contents = (yield* fs.exists(file))
     ? yield* fs.readFileString(file)
     : "{}";
+
   const settings = yield* Schema.decodeEffect(Schema.fromJsonString(Settings))(
     contents,
   ).pipe(
@@ -126,7 +130,9 @@ export const loadSettings = Effect.fn("Config.loadSettings")(function* (
         }),
     ),
   );
+
   const launchers = settings.launchers ?? defaultLaunchers;
+
   if (
     new Set(launchers.map((launcher) => launcher.id)).size !== launchers.length
   )
@@ -134,6 +140,7 @@ export const loadSettings = Effect.fn("Config.loadSettings")(function* (
       message:
         "Launcher IDs in config.json must be unique. Rename the duplicates and try again.",
     });
+
   return {
     settings,
     launchers,
@@ -165,6 +172,7 @@ export class RuntimeConfig extends Context.Service<
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
+
       const env = yield* Schema.decodeUnknownEffect(Environment)(
         process.env,
       ).pipe(
@@ -177,13 +185,17 @@ export class RuntimeConfig extends Context.Service<
             }),
         ),
       );
+
       const file = path.join(env.HERDR_PLUGIN_CONFIG_DIR, "config.json");
       const { settings, launchers, revision } = yield* loadSettings(file);
+
       const state = stateDirectory(
         env.HERDR_PLUGIN_STATE_DIR,
         env.HERDR_SOCKET_PATH,
       );
+
       yield* fs.makeDirectory(state, { recursive: true, mode: 0o700 });
+
       return RuntimeConfig.of({
         socket: env.HERDR_SOCKET_PATH,
         root: env.HERDR_PLUGIN_ROOT,

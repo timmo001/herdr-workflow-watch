@@ -15,9 +15,11 @@ import { Process } from "./services/process";
 const platform = RuntimeConfig.layer.pipe(
   Layer.provideMerge(NodeServices.layer),
 );
+
 const services = Layer.mergeAll(Process.layer, herdrLayer, ghLayer).pipe(
   Layer.provideMerge(platform),
 );
+
 const application = GitHub.layer.pipe(Layer.provideMerge(services));
 
 Command.make("herdr-workflow-watch").pipe(

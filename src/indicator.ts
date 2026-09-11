@@ -9,11 +9,14 @@ export function indicator(
   >,
 ) {
   if (!status) return null;
+
   const previous =
     config.showPrevious && status.runs.length === 0 ? status.previous : null;
+
   const runs = previous?.runs ?? status.runs;
   const failures = runs.filter((run) => attention(run.conclusion));
   const inProgress = runs.some((run) => run.status !== "completed");
+
   const success =
     (config.showSuccess || previous !== null) &&
     runs.some((run) => run.conclusion === "success") &&
@@ -24,6 +27,7 @@ export function indicator(
           run.conclusion === "neutral" ||
           run.conclusion === "skipped"),
     );
+
   let value = failures.length
     ? config.indicatorTemplates.failure.replaceAll(
         "{count}",
@@ -34,6 +38,7 @@ export function indicator(
       : success
         ? config.indicatorTemplates.success
         : null;
+
   if (previous && value)
     value = config.indicatorTemplates.previous
       .replaceAll("{count}", String(previous.commitsBehind))
@@ -42,7 +47,9 @@ export function indicator(
         `${previous.commitsBehind} ${previous.commitsBehind === 1 ? "commit" : "commits"} ago`,
       )
       .replaceAll("{status}", value);
+
   if (config.showIdle && status.runs.length === 0 && !value)
     return config.indicatorTemplates.idle;
+
   return value;
 }
