@@ -14,7 +14,7 @@
       "devDependencies": {
         "@effect/tsgo": "0.45.0",
         "@oxlint/plugins": "1.82.0",
-        "@timmo001/oxlint-rules": "0.3.0",
+        "@timmo001/oxlint-rules": "0.3.3",
         "@types/bun": "1.4.2",
         "@types/proper-lockfile": "4.1.4",
         "oxlint": "1.82.0",
@@ -120,7 +120,7 @@
 
     "@timmo001/effect-gh": ["@timmo001/effect-gh@github:timmo001/effect-gh#01b73e4", { "peerDependencies": { "effect": "4.0.0-rc.112" } }, "timmo001-effect-gh-01b73e4", "sha512-YQPEPpywiZwqrvhAS3hzaNcSPCatP7cg4tTo/xJ6xVAMslzSCHkwdWycr6kUcVnzSPneT8UWemFIEVeLDIp+rw=="],
 
-    "@timmo001/oxlint-rules": ["@timmo001/oxlint-rules@0.3.0", "", { "peerDependencies": { "@oxlint/plugins": "1.81.0", "oxlint": "1.81.0" }, "bin": { "oxlint-rules": "dist/cli.js" } }, "sha512-TvpyUOFeQFfiLXYkFWFI7a4H6LXc/T0ILqP9w8VxBxldauATVsePddgN+rA4Ks2n63d8pkLBWedgfeVBx+8o/Q=="],
+    "@timmo001/oxlint-rules": ["@timmo001/oxlint-rules@0.3.3", "", { "peerDependencies": { "@oxlint/plugins": "1.82.0", "oxlint": "1.82.0" }, "bin": { "oxlint-rules": "dist/cli.js" } }, "sha512-Hshoa5LI9HV1VJRUOz7iAhdz1l12ygXB1bfp2bhYkaA1O3zvzUqAIDZa4GGuhbA9z8j3vDG1tzmxbgA7H+/cDQ=="],
 
     "@types/bun": ["@types/bun@1.4.2", "", { "dependencies": { "bun-types": "1.4.2" } }, "sha512-GimotNn7+ZV0uVArItBbriZsR1oNf0+WTzPkdcFrzShI7k2norL0uzEaJT8T33dWr7O/c9ZDuAFQrctKCi72oQ=="],
 

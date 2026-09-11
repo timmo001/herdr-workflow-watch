@@ -40,14 +40,18 @@ export const reportError = Effect.fn("Errors.reportError")(function* (
   const socket = process.env.HERDR_SOCKET_PATH;
   const state = process.env.HERDR_PLUGIN_STATE_DIR;
   const mode = process.argv[2];
+
   const log =
     state && socket && (mode === "watch" || mode === "dispatch")
       ? join(stateDirectory(state, socket), `${mode}.log`)
       : null;
+
   const home = process.env.HOME;
+
   const details = log
     ? `Log: ${home && log.startsWith(`${home}/`) ? `~${log.slice(home.length)}` : log}`
     : `Logs: herdr plugin log list --plugin ${pluginId}`;
+
   const recovery =
     error instanceof ConfigError
       ? "Fix the plugin config, then retry."
@@ -58,6 +62,7 @@ export const reportError = Effect.fn("Errors.reportError")(function* (
           : error instanceof ActionError
             ? "Reopen workflow failures to retry."
             : "Inspect the log before retrying.";
+
   const summary = plain(
     error instanceof HerdrServerError
       ? `${error.serverCode}: ${error.serverMessage}`
@@ -70,8 +75,10 @@ export const reportError = Effect.fn("Errors.reportError")(function* (
           ? error.message
           : String(error),
   ).replace(/\s+/g, " ");
+
   // Herdr limits desktop notification bodies to 240 characters.
   const budget = Math.max(0, 240 - recovery.length - details.length - 2);
+
   const message = [
     summary.length > budget
       ? `${summary.slice(0, Math.max(0, budget - 1))}…`
@@ -79,7 +86,9 @@ export const reportError = Effect.fn("Errors.reportError")(function* (
     recovery,
     details,
   ].join("\n");
+
   yield* Effect.logError(title, cause);
+
   if (socket) {
     yield* Effect.gen(function* () {
       yield* (yield* HerdrSdk).notifications.show({ title, body: message });
@@ -99,5 +108,6 @@ export const reportError = Effect.fn("Errors.reportError")(function* (
       ),
     );
   }
+
   return message;
 });

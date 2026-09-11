@@ -19,11 +19,13 @@ export const Origin = Schema.Struct({
     }),
   ),
 });
+
 export type Origin = typeof Origin.Type;
 
 export const herdrLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* RuntimeConfig;
+
     return herdrSdkLayerFromOptions({
       socketPath: config.socket,
       requestTimeout: Duration.millis(config.timeoutMs),
@@ -33,6 +35,7 @@ export const herdrLayer = Layer.unwrap(
 
 export const enabled = Effect.gen(function* () {
   const plugins = yield* (yield* HerdrSdk).plugins.list({ pluginId });
+
   return plugins.some((plugin) => plugin.id === pluginId && plugin.enabled);
 });
 

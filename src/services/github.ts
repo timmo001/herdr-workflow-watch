@@ -1,5 +1,5 @@
 import { Api, Gh } from "@timmo001/effect-gh";
-import { Context, Effect, Layer, Schema, Stream } from "effect";
+import { Context, Effect, Layer, Match, Schema, Stream } from "effect";
 import { Process } from "./process";
 
 export class GitHubError extends Schema.TaggedError<GitHubError>()(
@@ -16,8 +16,11 @@ export const Target = Schema.Struct({
   branch: Schema.String,
   localBranch: Schema.String,
 });
+
 export type Target = typeof Target.Type;
+
 const Sha = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
+
 export const Run = Schema.Struct({
   id: Schema.Int,
   run_attempt: Schema.Int,
@@ -29,7 +32,9 @@ export const Run = Schema.Struct({
   conclusion: Schema.NullOr(Schema.String),
   html_url: Schema.String,
 });
+
 export type Run = typeof Run.Type;
+
 export const Status = Schema.Struct({
   sha: Sha,
   runs: Schema.Array(Run),
@@ -41,11 +46,14 @@ export const Status = Schema.Struct({
     }),
   ),
 });
+
 export type Status = typeof Status.Type;
+
 const RunPage = Schema.Struct({
   total_count: Schema.Int,
   workflow_runs: Schema.Array(Run),
 });
+
 const Job = Schema.Struct({
   id: Schema.Int,
   name: Schema.String,
@@ -107,50 +115,65 @@ export class GitHub extends Context.Service<
             ["rev-parse", "--show-toplevel"],
             cwd,
           );
+
           if (root.code !== 0) {
             if (root.stderr.includes("not a git repository")) return null;
+
             return yield* new GitHubError({ message: root.stderr });
           }
+
           const branch = yield* process.run(
             "git",
             ["symbolic-ref", "--quiet", "--short", "HEAD"],
             root.stdout,
           );
+
           if (branch.code === 1) return null;
+
           if (branch.code !== 0)
             return yield* new GitHubError({ message: branch.stderr });
+
           const upstream = yield* process.run(
             "git",
             ["config", "--get", `branch.${branch.stdout}.remote`],
             root.stdout,
           );
+
           const merge = yield* process.run(
             "git",
             ["config", "--get", `branch.${branch.stdout}.merge`],
             root.stdout,
           );
+
           if (upstream.code > 1 || merge.code > 1)
             return yield* new GitHubError({
               message: upstream.stderr || merge.stderr,
             });
+
           const remotes = (yield* process.text(
             "git",
             ["remote"],
             root.stdout,
           )).split("\n");
+
           const candidates = [...new Set([upstream.stdout, "origin"])];
+
           for (const remote of candidates) {
             if (!remote || !remotes.includes(remote)) continue;
+
             const url = yield* process.text(
               "git",
               ["remote", "get-url", remote],
               root.stdout,
             );
+
             const match =
               /^(?:https?:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)\/?$/.exec(
                 url.replace(/\.git\/?$/, ""),
               );
+
             if (!match?.[1]) continue;
+
             return {
               root: root.stdout,
               remote,
@@ -163,6 +186,7 @@ export class GitHub extends Context.Service<
                   : branch.stdout,
             };
           }
+
           return null;
         },
         (effect) =>
@@ -186,17 +210,21 @@ export class GitHub extends Context.Service<
           },
           RunPage,
         );
+
         const attempts = new Map<number, Run>();
+
         for (const page of pages) {
           for (const run of page.workflow_runs) {
             if ((attempts.get(run.id)?.run_attempt ?? 0) <= run.run_attempt)
               attempts.set(run.id, run);
           }
         }
+
         if (pages.some((page) => page.total_count > attempts.size))
           return yield* new GitHubError({
             message: "GitHub returned an incomplete workflow run list",
           });
+
         return [...attempts.values()].filter(
           (run) => run.head_sha === sha && run.head_branch === target.branch,
         );
@@ -217,13 +245,17 @@ export class GitHub extends Context.Service<
               }),
             ),
           );
+
           const ref = refs.find(
             (value) => value.ref === `refs/heads/${target.branch}`,
           );
+
           if (!ref) return null;
           const runs = yield* runsAt(target, ref.object.sha);
           const current: Status = { sha: ref.object.sha, runs, previous: null };
+
           if (runs.length > 0 || !includePrevious) return current;
+
           const recent = yield* Api.json(
             {
               endpoint: `repos/${target.repository}/actions/runs`,
@@ -233,7 +265,9 @@ export class GitHub extends Context.Service<
             },
             RunPage,
           );
+
           if (recent.workflow_runs.length === 0) return current;
+
           const commits = yield* Api.json(
             {
               endpoint: `repos/${target.repository}/commits`,
@@ -248,15 +282,19 @@ export class GitHub extends Context.Service<
               }),
             ),
           );
+
           const parents = new Map(
             commits.map((commit) => [commit.sha, commit.parents[0]?.sha]),
           );
+
           const candidates = new Set(
             recent.workflow_runs
               .filter((run) => run.head_branch === target.branch)
               .map((run) => run.head_sha),
           );
+
           let sha = parents.get(current.sha);
+
           for (
             let commitsBehind = 1;
             sha && parents.has(sha) && commitsBehind <= 100;
@@ -264,14 +302,17 @@ export class GitHub extends Context.Service<
           ) {
             if (candidates.has(sha)) {
               const previousRuns = yield* runsAt(target, sha);
+
               if (previousRuns.length > 0)
                 return {
                   ...current,
                   previous: { sha, commitsBehind, runs: previousRuns },
                 };
             }
+
             sha = parents.get(sha);
           }
+
           return current;
         },
         (effect) =>
@@ -296,10 +337,13 @@ export class GitHub extends Context.Service<
             },
             Schema.Struct({ jobs: Schema.Array(Job) }),
           );
+
           const jobs = pages
             .flatMap((page) => page.jobs)
             .filter((job) => attention(job.conclusion));
+
           let stderr = "";
+
           const logs = yield* gh
             .stream([
               "run",
@@ -312,13 +356,17 @@ export class GitHub extends Context.Service<
               "--log-failed",
             ])
             .pipe(
-              Stream.map((chunk) => {
-                if (chunk._tag === "Stderr") {
-                  stderr += chunk.text;
-                  return "";
-                }
-                return chunk.text;
-              }),
+              Stream.map((chunk) =>
+                Match.value(chunk).pipe(
+                  Match.tag("Stderr", (value) => {
+                    stderr += value.text;
+
+                    return "";
+                  }),
+                  Match.tag("Stdout", (value) => value.text),
+                  Match.exhaustive,
+                ),
+              ),
               Stream.mkString,
               Effect.map((stdout) => stdout.trim()),
               Effect.catchTag("GhCommandError", () =>
@@ -327,6 +375,7 @@ export class GitHub extends Context.Service<
                 ),
               ),
             );
+
           return {
             jobs,
             logs,
@@ -340,6 +389,7 @@ export class GitHub extends Context.Service<
             ),
           ),
       );
+
       return GitHub.of({ discover, status, details });
     }),
   );

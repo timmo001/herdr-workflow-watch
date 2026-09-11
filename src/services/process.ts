@@ -43,6 +43,7 @@ export class Process extends Context.Service<
       const config = yield* RuntimeConfig;
       const path = yield* Path.Path;
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
       const run = Effect.fn("Process.run")(
         function* (command: string, args: ReadonlyArray<string>, cwd?: string) {
           const child = yield* spawner.spawn(
@@ -59,6 +60,7 @@ export class Process extends Context.Service<
               extendEnv: true,
             }),
           );
+
           const [stdout, stderr, code] = yield* Effect.all(
             [
               child.stdout.pipe(Stream.decodeText(), Stream.mkString),
@@ -67,6 +69,7 @@ export class Process extends Context.Service<
             ],
             { concurrency: "unbounded" },
           );
+
           return {
             stdout: stdout.trim(),
             stderr: stderr.trim(),
@@ -89,11 +92,13 @@ export class Process extends Context.Service<
         cwd?: string,
       ) {
         const output = yield* run(command, args, cwd);
+
         if (output.code !== 0)
           return yield* new ProcessError({
             command,
             message: output.stderr || `${command} exited ${output.code}`,
           });
+
         return output.stdout;
       });
 
@@ -106,6 +111,7 @@ export class Process extends Context.Service<
             ),
             (file) => Effect.sync(() => closeSync(file)),
           );
+
           yield* Effect.callback<void, ProcessError>((resume) => {
             const child = spawn(
               process.execPath,
@@ -117,6 +123,7 @@ export class Process extends Context.Service<
                 env: { ...process.env, ...env },
               },
             );
+
             child.once("error", (cause) =>
               resume(
                 Effect.fail(
@@ -139,6 +146,7 @@ export class Process extends Context.Service<
             ),
           ),
       );
+
       return Process.of({ run, text, detach });
     }),
   );

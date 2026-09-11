@@ -1,5 +1,5 @@
 import { Gh } from "@timmo001/effect-gh";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Match, Path, Schema } from "effect";
 import { launchAgent, pasteDraft } from "../actions/agent";
 import { handoff } from "../actions/prompt";
 import { ActionError, Selection } from "../actions/selection";
@@ -12,18 +12,23 @@ export const dispatch = Effect.gen(function* () {
   const config = yield* RuntimeConfig;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
   const id = yield* Schema.decodeUnknownEffect(
     Schema.String.check(Schema.isPattern(/^[0-9a-f-]{36}$/)),
   )(process.env.WORKFLOW_WATCH_SELECTION);
+
   const file = path.join(config.state, `selection-${id}.json`);
+
   const selection = yield* Schema.decodeEffect(
     Schema.fromJsonString(Selection),
   )(yield* fs.readFileString(file));
+
   yield* fs.remove(file);
   const herdr = yield* HerdrSdk;
   yield* herdr.popups.close();
   const github = yield* GitHub;
   const gh = yield* Gh;
+
   const browse = Effect.fn("Dispatch.browse")(
     (args: ReadonlyArray<string>) => gh.execute(args),
     (effect) =>
@@ -32,22 +37,30 @@ export const dispatch = Effect.gen(function* () {
           (cause) =>
             new ProcessError({
               command: "gh",
-              message:
-                cause._tag === "GhCommandError"
-                  ? cause.stderr.trim() || `gh exited ${cause.exitCode}`
-                  : String(cause),
+              message: Match.value(cause).pipe(
+                Match.tag(
+                  "GhCommandError",
+                  (error) =>
+                    error.stderr.trim() || `gh exited ${error.exitCode}`,
+                ),
+                Match.orElse(String),
+              ),
             }),
         ),
       ),
   );
+
   if (!(yield* enabled))
     return yield* new ActionError({ message: "Workflow Watch is disabled" });
   const snapshot = yield* herdr.session.snapshot();
+
   const workspace = snapshot.workspaces.find(
     (value) => value.id === selection.origin.workspace,
   );
+
   const cwd = workspace && checkout(workspace, snapshot.panes);
   const target = cwd ? yield* github.discover(cwd) : null;
+
   if (
     !target ||
     target.root !== selection.target.root ||
@@ -59,6 +72,7 @@ export const dispatch = Effect.gen(function* () {
         "The originating checkout or branch changed; reopen Workflow Watch",
     });
   }
+
   if (selection.action === "actions") {
     yield* browse([
       "browse",
@@ -66,10 +80,13 @@ export const dispatch = Effect.gen(function* () {
       "--repo",
       `github.com/${target.repository}`,
     ]);
+
     return;
   }
+
   const status = yield* github.status(target);
   const current = status?.runs.find((run) => run.id === selection.run.id);
+
   if (
     !current ||
     current.head_sha !== selection.run.head_sha ||
@@ -80,6 +97,7 @@ export const dispatch = Effect.gen(function* () {
       message: "The selected run changed or recovered; reopen Workflow Watch",
     });
   }
+
   if (!("launcher" in selection)) {
     if (selection.action === "browser") {
       yield* browse([
@@ -93,10 +111,13 @@ export const dispatch = Effect.gen(function* () {
     } else {
       yield* pasteDraft(selection.origin, yield* handoff(target, current));
     }
+
     return;
   }
+
   const prompt = yield* handoff(target, current);
   const pane = yield* herdr.panes.get(selection.origin.pane.id);
+
   if (
     pane.workspaceId !== selection.origin.workspace ||
     pane.terminalId !== selection.origin.pane.terminalId
@@ -105,6 +126,7 @@ export const dispatch = Effect.gen(function* () {
       message: "The originating pane changed; reopen Workflow Watch",
     });
   }
+
   yield* launchAgent(
     selection.origin,
     target,
@@ -114,4 +136,5 @@ export const dispatch = Effect.gen(function* () {
     prompt,
   );
 });
+
 import { HerdrSdk } from "@herdr/sdk";

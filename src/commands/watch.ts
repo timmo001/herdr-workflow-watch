@@ -6,6 +6,7 @@ import {
   Effect,
   FileSystem,
   Path,
+  Result,
   Schedule,
 } from "effect";
 import { check, lock } from "proper-lockfile";
@@ -25,13 +26,16 @@ import { waitForUpdate } from "../services/reload";
 export const start = Effect.gen(function* () {
   const config = yield* RuntimeConfig;
   const path = yield* Path.Path;
+
   if (!(yield* enabled)) return;
+
   const held = yield* Effect.tryPromise(() =>
     check(path.join(config.state, "watcher"), {
       realpath: false,
       stale: 15_000,
     }),
   );
+
   if (!held) yield* (yield* Process).detach("watch");
 });
 
@@ -56,6 +60,7 @@ const runWatcher = Effect.gen(function* () {
   const herdr = yield* HerdrSdk;
   const github = yield* GitHub;
   const compromised = yield* Deferred.make<never, ProcessError>();
+
   const lease = yield* Effect.acquireRelease(
     Effect.tryPromise(() =>
       lock(path.join(config.state, "watcher"), {
@@ -92,6 +97,7 @@ const runWatcher = Effect.gen(function* () {
           )
         : Effect.void,
   );
+
   if (!lease) return false;
   yield* Effect.logInfo("Workflow watcher started");
   const workspaces = new Map<WorkspaceId, string>();
@@ -112,16 +118,21 @@ const runWatcher = Effect.gen(function* () {
 
   const discover = Effect.gen(function* () {
     const snapshot = yield* herdr.session.snapshot();
+
     const discovered = yield* Effect.forEach(
       snapshot.workspaces,
       Effect.fn("Watch.discover")(function* (workspace) {
         const cwd = checkout(workspace, snapshot.panes);
+
         const result = cwd
           ? yield* github.discover(cwd).pipe(Effect.result)
           : null;
+
         const target = result?._tag === "Success" ? result.success : null;
+
         const error =
           result?._tag === "Failure" ? String(result.failure) : null;
+
         if (error && result?._tag === "Failure") {
           if (discoveryErrors.get(workspace.id) !== error)
             yield* reportError(
@@ -132,34 +143,44 @@ const runWatcher = Effect.gen(function* () {
         } else {
           discoveryErrors.delete(workspace.id);
         }
+
         const key = target ? targetKey(target) : "";
+
         if (workspaces.get(workspace.id) !== key)
           yield* metadata(workspace.id, null);
         workspaces.set(workspace.id, key);
+
         return { id: workspace.id, target, error };
       }),
       { concurrency: config.concurrency },
     );
+
     const targets = new Map<string, Target>();
+
     for (const item of discovered)
       if (item.target) targets.set(targetKey(item.target), item.target);
+
     for (const key of cached.keys()) if (!targets.has(key)) cached.delete(key);
+
     for (const id of workspaces.keys())
       if (!snapshot.workspaces.some((workspace) => workspace.id === id)) {
         workspaces.delete(id);
         discoveryErrors.delete(id);
       }
+
     return { discovered, targets };
   });
 
   let discovery: Effect.Success<typeof discover> | undefined;
   let nextDiscovery = 0;
   let nextPoll = 0;
+
   const refresh = Effect.gen(function* () {
     if (!discovery || (yield* Clock.currentTimeMillis) >= nextDiscovery) {
       discovery = yield* discover;
       nextDiscovery = (yield* Clock.currentTimeMillis) + config.pollMs;
     }
+
     const { discovered, targets } = discovery;
     yield* Effect.forEach(
       [...targets]
@@ -171,6 +192,7 @@ const runWatcher = Effect.gen(function* () {
       Effect.fn("Watch.poll")(function* ([key, target]) {
         const now = yield* Clock.currentTimeMillis;
         const previous = cached.get(key);
+
         if (now < nextPoll || (previous && now < previous.next)) return;
         yield* Effect.forEach(
           discovered.filter(
@@ -180,11 +202,14 @@ const runWatcher = Effect.gen(function* () {
           { concurrency: config.concurrency, discard: true },
         );
         const started = yield* Clock.currentTimeMillis;
+
         const result = yield* github
           .status(target, config.showPrevious)
           .pipe(Effect.result);
+
         const finished = yield* Clock.currentTimeMillis;
-        if (result._tag === "Failure") {
+
+        if (Result.isFailure(result)) {
           if (previous?.error !== String(result.failure))
             yield* reportError(
               Cause.fail(result.failure),
@@ -214,6 +239,7 @@ const runWatcher = Effect.gen(function* () {
             error: null,
           });
         }
+
         nextPoll =
           started +
           ([...cached.values()].some((value) => unfinished(value.status))
@@ -223,12 +249,14 @@ const runWatcher = Effect.gen(function* () {
       }),
       { concurrency: config.concurrency, discard: true },
     );
+
     const entries = yield* Effect.forEach(
       discovered,
       Effect.fn("Watch.publish")(function* (item) {
         const value = item.target
           ? cached.get(targetKey(item.target))
           : undefined;
+
         const error = item.error ?? value?.error ?? null;
         yield* metadata(
           item.id,
@@ -236,6 +264,7 @@ const runWatcher = Effect.gen(function* () {
             ? config.indicatorTemplates.unavailable
             : indicator(value?.status ?? null, config),
         );
+
         return {
           workspace: item.id,
           target: item.target,
@@ -245,6 +274,7 @@ const runWatcher = Effect.gen(function* () {
       }),
       { concurrency: config.concurrency },
     );
+
     const file = path.join(config.state, "status.json");
     yield* fs.writeFileString(
       `${file}.tmp`,
@@ -256,12 +286,14 @@ const runWatcher = Effect.gen(function* () {
       { mode: 0o600 },
     );
     yield* fs.rename(`${file}.tmp`, file);
+
     const nextRefresh = Math.min(
       nextDiscovery,
       ...[...targets.keys()].map((key) =>
         Math.max(nextPoll, cached.get(key)?.next ?? 0),
       ),
     );
+
     return Math.max(0, nextRefresh - (yield* Clock.currentTimeMillis));
   });
 
@@ -274,9 +306,12 @@ const runWatcher = Effect.gen(function* () {
       const delay = yield* refresh.pipe(
         Effect.retry({ times: 5, schedule: Schedule.spaced(1_000) }),
       );
+
       yield* Effect.sleep(delay);
     }
+
     yield* Effect.logInfo("Workflow watcher disabled");
+
     return false;
   }).pipe(
     Effect.raceFirst(waitForUpdate.pipe(Effect.as(true))),
@@ -286,6 +321,7 @@ const runWatcher = Effect.gen(function* () {
 
 export const watch = Effect.gen(function* () {
   const restart = yield* runWatcher;
+
   if (restart && (yield* enabled)) {
     yield* Effect.logInfo("Workflow Watch changed; starting a new watcher");
     yield* (yield* Process).detach("watch");

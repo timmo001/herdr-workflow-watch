@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { HerdrSdk, PaneId, PluginId, WorkspaceId } from "@herdr/sdk";
-import { Cause, Console, Effect, FileSystem, Path, Schema } from "effect";
+import {
+  Cause,
+  Console,
+  Effect,
+  FileSystem,
+  Path,
+  Result,
+  Schema,
+} from "effect";
 import { Prompt } from "effect/unstable/cli";
 import { availableLaunchers, pasteTarget } from "../actions/agent";
 import { Action, ActionError, Selection } from "../actions/selection";
@@ -15,6 +23,7 @@ import { start } from "./watch";
 
 export const open = Effect.gen(function* () {
   const herdr = yield* HerdrSdk;
+
   const context = yield* Schema.decodeEffect(
     Schema.fromJsonString(
       Schema.Struct({
@@ -23,17 +32,21 @@ export const open = Effect.gen(function* () {
       }),
     ),
   )(process.env.HERDR_PLUGIN_CONTEXT_JSON ?? "{}");
+
   const pane = yield* herdr.panes.get(context.focused_pane_id);
+
   if (pane.workspaceId !== context.workspace_id)
     return yield* new ActionError({
       message: "The originating workspace changed",
     });
+
   const origin: Origin = {
     workspace: context.workspace_id,
     pane,
     processes:
       (yield* herdr.panes.processInfo(pane.id)).foregroundProcesses ?? [],
   };
+
   yield* start;
   yield* herdr.plugins.panes.open(PluginId.make(pluginId), {
     entrypoint: "picker",
@@ -51,29 +64,37 @@ export const picker = Effect.gen(function* () {
   const origin = yield* Schema.decodeEffect(Schema.fromJsonString(Origin))(
     process.env.WORKFLOW_WATCH_ORIGIN ?? "{}",
   );
+
   const config = yield* RuntimeConfig;
   const herdr = yield* HerdrSdk;
   const github = yield* GitHub;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const snapshot = yield* herdr.session.snapshot();
+
   const workspace = snapshot.workspaces.find(
     (value) => value.id === origin.workspace,
   );
+
   const cwd = workspace && checkout(workspace, snapshot.panes);
   const target = cwd ? yield* github.discover(cwd) : null;
+
   const status = target
     ? yield* github.status(target, config.showPrevious)
     : null;
+
   const failures =
     status?.runs.filter((run) => attention(run.conclusion)) ?? [];
+
   if (!target) {
     yield* Prompt.select({
       message: "No pushed GitHub branch to watch",
       choices: [{ title: "Close", value: "close" }],
     });
+
     return;
   }
+
   const run = yield* Prompt.select<Run | "actions" | null>({
     message: plain(
       [
@@ -104,22 +125,27 @@ export const picker = Effect.gen(function* () {
       { title: "Close", value: null },
     ],
   });
+
   if (!run) return;
   let selection: typeof Selection.Type;
+
   if (run === "actions") {
     selection = { origin, target, action: "actions" };
   } else {
     const paste = yield* pasteTarget(origin).pipe(Effect.result);
+
     const launchers = yield* availableLaunchers(target.root).pipe(
       Effect.catch((cause) =>
         Effect.gen(function* () {
           yield* Console.error(
             yield* reportError(Cause.fail(cause), "Agent discovery failed"),
           );
+
           return [];
         }),
       ),
     );
+
     const action = yield* Prompt.select<typeof Action.Type | null>({
       message: "What next?",
       choices: [
@@ -127,7 +153,7 @@ export const picker = Effect.gen(function* () {
         {
           title: "Paste draft into original agent",
           value: "paste",
-          disabled: paste._tag === "Failure",
+          disabled: Result.isFailure(paste),
           description:
             "Insert without submitting; requires the same ready agent",
         },
@@ -144,7 +170,9 @@ export const picker = Effect.gen(function* () {
         { title: "Close", value: null },
       ],
     });
+
     if (!action) return;
+
     if (action === "checkout" || action === "worktree") {
       const launcher = yield* Prompt.select<typeof Launcher.Type | null>({
         message: "Which agent?",
@@ -153,12 +181,14 @@ export const picker = Effect.gen(function* () {
           { title: "Close", value: null },
         ],
       });
+
       if (!launcher) return;
       selection = { origin, target, run, action, launcher };
     } else {
       selection = { origin, target, run, action };
     }
   }
+
   const id = randomUUID();
   yield* fs.writeFileString(
     path.join(config.state, `selection-${id}.json`),
@@ -166,6 +196,7 @@ export const picker = Effect.gen(function* () {
     { mode: 0o600 },
   );
   yield* (yield* Process).detach("dispatch", { WORKFLOW_WATCH_SELECTION: id });
+
   // The worker closes this popup before changing layout or sending input.
   return yield* Effect.never;
 }).pipe(

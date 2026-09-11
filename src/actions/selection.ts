@@ -11,8 +11,11 @@ export class ActionError extends Schema.TaggedError<ActionError>()(
 ) {}
 
 const RunAction = Schema.Literals(["browser", "paste"]);
+
 export const LaunchAction = Schema.Literals(["checkout", "worktree"]);
+
 export const Action = Schema.Union([RunAction, LaunchAction]);
+
 export const Selection = Schema.Union([
   Schema.Struct({
     origin: Origin,

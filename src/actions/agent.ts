@@ -12,6 +12,7 @@ const resolveLauncher = Effect.fn("Actions.resolveLauncher")(function* (
   cwd: string,
 ) {
   const process = yield* Process;
+
   const executable = (yield* Path.Path).resolve(
     cwd,
     yield* process.text(
@@ -20,21 +21,26 @@ const resolveLauncher = Effect.fn("Actions.resolveLauncher")(function* (
       cwd,
     ),
   );
+
   yield* process.text("test", ["-f", executable]);
   yield* process.text("test", ["-x", executable]);
+
   return executable;
 });
 
 export const availableLaunchers = Effect.fn("Actions.availableLaunchers")(
   function* (cwd: string) {
     const config = yield* RuntimeConfig;
+
     if (config.launchers.length === 0) return [];
     const integrations = yield* (yield* HerdrSdk).integrations.list();
+
     const installed = new Set<string>(
       integrations
         .filter((integration) => integration.state !== "notInstalled")
         .map((integration) => integration.target),
     );
+
     return yield* Effect.filter(
       config.launchers.filter((launcher) =>
         installed.has(launcher.integration ?? launcher.agent),
@@ -50,8 +56,10 @@ export const pasteTarget = Effect.fn("Actions.pasteTarget")(function* (
 ) {
   const herdr = yield* HerdrSdk;
   const agent = yield* herdr.agents.get({ paneId: origin.pane.id });
+
   const processes =
     (yield* herdr.panes.processInfo(agent.paneId)).foregroundProcesses ?? [];
+
   if (
     Option.isNone(origin.pane.agent) ||
     Option.getOrUndefined(agent.agent) !==
@@ -69,6 +77,7 @@ export const pasteTarget = Effect.fn("Actions.pasteTarget")(function* (
       message: "The original agent is no longer ready for a draft",
     });
   }
+
   return agent;
 });
 
@@ -91,6 +100,7 @@ export const launchAgent = Effect.fn("Actions.launchAgent")(function* (
   const config = yield* RuntimeConfig;
   const process = yield* Process;
   const herdr = yield* HerdrSdk;
+
   if (
     !config.launchers.some((value) =>
       Schema.toEquivalence(Launcher)(value, launcher),
@@ -99,6 +109,7 @@ export const launchAgent = Effect.fn("Actions.launchAgent")(function* (
     return yield* new ActionError({
       message: "The selected launcher changed; reopen Workflow Watch",
     });
+
   if (
     !(yield* availableLaunchers(target.root)).some(
       (value) => value.id === launcher.id,
@@ -109,12 +120,14 @@ export const launchAgent = Effect.fn("Actions.launchAgent")(function* (
     });
   const executable = yield* resolveLauncher(launcher, target.root);
   let pane: Pane;
+
   if (action === "worktree") {
     const commit = yield* process.run(
       "git",
       ["cat-file", "-e", `${run.head_sha}^{commit}`],
       target.root,
     );
+
     if (commit.code !== 0)
       yield* process.text(
         "git",
@@ -141,7 +154,9 @@ export const launchAgent = Effect.fn("Actions.launchAgent")(function* (
       focus: true,
     });
   }
+
   let expected: string | undefined;
+
   if (launcher.verifyCommand) {
     const [verify, ...verifyArgs] = launcher.verifyCommand;
     expected = yield* process.text(
@@ -149,6 +164,7 @@ export const launchAgent = Effect.fn("Actions.launchAgent")(function* (
       verifyArgs,
       Option.getOrUndefined(pane.cwd) ?? target.root,
     );
+
     if (!expected.startsWith("/") || expected.includes("\n"))
       return yield* new ActionError({
         message:
@@ -157,14 +173,18 @@ export const launchAgent = Effect.fn("Actions.launchAgent")(function* (
     yield* process.text("test", ["-f", expected]);
     yield* process.text("test", ["-x", expected]);
   }
+
   const command = [executable, ...launcher.argv.slice(1)]
     .map((arg) => `'${arg.replaceAll("'", "'\\''")}'`)
     .join(" ");
+
   yield* herdr.panes.sendInput(pane.id, { text: command, keys: ["enter"] });
   yield* Effect.gen(function* () {
     const agent = yield* herdr.agents.get({ paneId: pane.id });
+
     const processes =
       (yield* herdr.panes.processInfo(pane.id)).foregroundProcesses ?? [];
+
     if (
       Option.getOrUndefined(agent.agent) !== launcher.agent ||
       !["idle", "done"].includes(agent.status) ||

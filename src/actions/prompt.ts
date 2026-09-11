@@ -13,6 +13,7 @@ export const handoff = Effect.fn("Actions.handoff")(function* (
   const config = yield* RuntimeConfig;
   const path = yield* Path.Path;
   const details = yield* github.details(target, run);
+
   const output = plain(
     [
       ...details.jobs.map((job) =>
@@ -31,12 +32,15 @@ export const handoff = Effect.fn("Actions.handoff")(function* (
       details.logs || "No failed-step output was returned.",
     ].join("\n"),
   );
+
   const file = path.join(
     config.state,
     `run-${run.id}-attempt-${run.run_attempt}-${randomUUID()}.txt`,
   );
+
   if (output.length > 12_000)
     yield* fs.writeFileString(file, output, { mode: 0o600 });
+
   return plain(
     [
       "Investigate and fix this GitHub Actions failure in this checkout. Follow its AGENTS.md. Leave changes uncommitted and unpushed.",
