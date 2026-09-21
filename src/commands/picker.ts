@@ -87,7 +87,7 @@ export const picker = Effect.gen(function* () {
     status?.runs.filter((run) => attention(run.conclusion)) ?? [];
 
   if (!target) {
-    yield* Prompt.select({
+    yield* Prompt.Select({
       message: "No pushed GitHub branch to watch",
       choices: [{ title: "Close", value: "close" }],
     });
@@ -95,7 +95,7 @@ export const picker = Effect.gen(function* () {
     return;
   }
 
-  const run = yield* Prompt.select<Run | "actions" | null>({
+  const run = yield* Prompt.Select<Run | "actions" | null>({
     message: plain(
       [
         target.repository,
@@ -146,7 +146,7 @@ export const picker = Effect.gen(function* () {
       ),
     );
 
-    const action = yield* Prompt.select<typeof Action.Type | null>({
+    const action = yield* Prompt.Select<typeof Action.Type | null>({
       message: "What next?",
       choices: [
         { title: "Open failure in browser", value: "browser" },
@@ -174,7 +174,7 @@ export const picker = Effect.gen(function* () {
     if (!action) return;
 
     if (action === "checkout" || action === "worktree") {
-      const launcher = yield* Prompt.select<typeof Launcher.Type | null>({
+      const launcher = yield* Prompt.Select<typeof Launcher.Type | null>({
         message: "Which agent?",
         choices: [
           ...launchers.map((value) => ({ title: plain(value.label), value })),
@@ -206,7 +206,7 @@ export const picker = Effect.gen(function* () {
       yield* Console.error(
         yield* reportError(cause, "Workflow Watch unavailable"),
       );
-      yield* Prompt.select({
+      yield* Prompt.Select({
         message: "Workflow Watch unavailable",
         choices: [{ title: "Close", value: "close" }],
       });
