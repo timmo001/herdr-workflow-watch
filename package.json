@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-rc.117",
-    "@herdr/sdk": "github:timmo001/herdr-ts-sdk#4fe6fb68089152a7c97f01a488470981aa234322",
+    "@herdr/sdk": "github:timmo001/herdr-ts-sdk#dd123bffd28150f70adcd984500a5c591dc6e7a3",
     "@timmo001/effect-gh": "github:timmo001/effect-gh#01b73e436009015244179d705844552f7b3dbf7d",
     "effect": "4.0.0-rc.117",
     "proper-lockfile": "4.1.2"
