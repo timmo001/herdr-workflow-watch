@@ -8,7 +8,7 @@
   ],
   "dependencyDashboard": true,
   "labels": ["dependencies"],
-  "minimumReleaseAge": "2 days",
+  "minimumReleaseAge": "1 day",
   "packageRules": [
     {
       "description": "Update the Effect runtime and integrations together.",
@@ -17,13 +17,22 @@
       "groupSlug": "effect"
     },
     {
-      "description": "Update first-party packages and workflows without a release delay.",
-      "matchPackageNames": ["@timmo001/**", "timmo001/workflows"],
+      "description": "Update first-party dependencies without a release delay.",
+      "matchPackageNames": [
+        "@timmo001/**",
+        "timmo001/**",
+        "https://github.com/timmo001/**"
+      ],
       "minimumReleaseAge": null
     },
     {
       "description": "Use the shorter release delay for Effect dependencies.",
-      "matchPackageNames": ["effect", "@effect/platform-node", "@effect/tsgo"],
+      "matchPackageNames": [
+        "effect",
+        "@effect/platform-*",
+        "@effect/vitest",
+        "@effect/tsgo"
+      ],
       "minimumReleaseAge": "2 hours"
     }
   ]
