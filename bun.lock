@@ -6,7 +6,7 @@
       "name": "herdr-workflow-watch",
       "dependencies": {
         "@effect/platform-node": "4.0.0-rc.117",
-        "@herdr/sdk": "github:timmo001/herdr-ts-sdk#835ad824804a57f4ec635930a66b0b0bc46d776b",
+        "@herdr/sdk": "github:timmo001/herdr-ts-sdk#b3038529e418178e950b939a0ff078e9b315f9a9",
         "@timmo001/effect-gh": "github:timmo001/effect-gh#c17708f54b7dcdf84adaf3d82983d9a168d69f52",
         "effect": "4.0.0-rc.117",
         "proper-lockfile": "4.1.2",
@@ -52,7 +52,7 @@
 
     "@effect/tsgo-win32-x64": ["@effect/tsgo-win32-x64@0.45.0", "", { "os": "win32", "cpu": "x64" }, "sha512-1Hsr/sT5dmIafoY9L0ASJo4VqGyPNzM1nwTb4Wj1Lmjq6kGuwO/PVozFg3WZZ0piChFmgiU3nx1AKZfyqgjGUw=="],
 
-    "@herdr/sdk": ["@herdr/sdk@github:timmo001/herdr-ts-sdk#835ad82", { "dependencies": { "@effect/platform-node-shared": "4.0.0-rc.117", "ajv": "^8.20.0", "effect": "4.0.0-rc.117" } }, "timmo001-herdr-ts-sdk-835ad82", "sha512-Fb158fgG5fKYbnxhGyWHDvanH2e0pM5MgZX/HpF4fJ3rW5RsNJLuCG9Yp2VZXhnEz5NHheYJSLbkKXD1VXCmbw=="],
+    "@herdr/sdk": ["@herdr/sdk@github:timmo001/herdr-ts-sdk#b303852", { "dependencies": { "@effect/platform-node-shared": "4.0.0-rc.117", "ajv": "^8.20.0", "effect": "4.0.0-rc.117" } }, "timmo001-herdr-ts-sdk-b303852", "sha512-xWyGygDI/TjHD42rXJceFxJFOXDAtpDCiVUEicyV2SbxgHstjpQmySlAATb4UxllXGIBXZIUARr47LgMcDUiEQ=="],
 
     "@oxlint-tsgolint/darwin-arm64": ["@oxlint-tsgolint/darwin-arm64@7.0.2002", "", { "os": "darwin", "cpu": "arm64" }, "sha512-E3yYb/tI+5M3SqGgKwrwUD0nmjA2FMGD1xFbma46qi8Y7+nPTlGY6bZk/hqxijc9Vda/tdtUxQ2d5zGIEX9qlg=="],
 
