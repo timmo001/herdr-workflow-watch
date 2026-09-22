@@ -8,9 +8,11 @@ import {
   Path,
   Result,
   Schema,
+  Terminal,
 } from "effect";
 import { Prompt } from "effect/unstable/cli";
 import { availableLaunchers, pasteTarget } from "../actions/agent";
+import { handoff } from "../actions/prompt";
 import { Action, ActionError, Selection } from "../actions/selection";
 import { Launcher, RuntimeConfig, pluginId } from "../config";
 import { reportError } from "../errors";
@@ -146,10 +148,11 @@ export const picker = Effect.gen(function* () {
       ),
     );
 
-    const action = yield* Prompt.Select<typeof Action.Type | null>({
+    const action = yield* Prompt.Select<typeof Action.Type | "copy" | null>({
       message: "What next?",
       choices: [
         { title: "Open failure in browser", value: "browser" },
+        { title: "Copy failure to clipboard", value: "copy" },
         {
           title: "Paste draft into original agent",
           value: "paste",
@@ -172,6 +175,19 @@ export const picker = Effect.gen(function* () {
     });
 
     if (!action) return;
+
+    if (action === "copy") {
+      // Clipboard output must go through the popup's terminal, not dispatch's log.
+      yield* (yield* Terminal.Terminal).display(
+        `\u001b]52;c;${Buffer.from(yield* handoff(target, run)).toString("base64")}\u0007`,
+      );
+      yield* Prompt.Select({
+        message: "Failure sent to clipboard",
+        choices: [{ title: "Close", value: "close" }],
+      });
+
+      return;
+    }
 
     if (action === "checkout" || action === "worktree") {
       const launcher = yield* Prompt.Select<typeof Launcher.Type | null>({

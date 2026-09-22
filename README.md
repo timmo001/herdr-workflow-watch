@@ -60,6 +60,9 @@ Choose **Open all Actions in browser** in the first menu to open the repository'
 Open `timmo.workflow-watch.open` to pick a failure and then:
 
 - **Open failure in browser:** opens the selected run through `gh`.
+- **Copy failure to clipboard:** copies the investigation draft through Herdr's
+  terminal clipboard handling, including run details, failed jobs and logs.
+  Large logs are saved to a local file referenced by the copied draft.
 - **Paste draft into original agent:** inserts the failure at the cursor without
   clearing existing input or submitting it. Available only while that same agent
   is ready, with no approval or question prompt.
